@@ -20,6 +20,7 @@ class PackageTests(unittest.TestCase):
         shutil.copytree(AGENT_ROOT, cls.agent, ignore=IGNORE)
         (cls.agent / ".env").write_text("X=1\n")
         (cls.agent / "arcflash" / ".env").write_text("X=1\n")
+        (cls.agent / "arcflash" / ".DS_Store").write_bytes(b"finder")
         (cls.agent / "outputs" / "run").mkdir(parents=True)
         (cls.agent / "outputs" / "run" / "app.js").write_text("x")
         (cls.agent / "arcflash" / "__pycache__").mkdir(exist_ok=True)
@@ -39,6 +40,7 @@ class PackageTests(unittest.TestCase):
         self.assertIn("arcflash/template/app/deploy.sh", names); self.assertIn("arcflash/prompts/rules.md", names)
         self.assertTrue(all(n in ("main.py", "requirements.txt") or n.startswith("arcflash/") for n in names))
         self.assertFalse(any(n.endswith(".env") or "__pycache__" in n for n in names))
+        self.assertFalse(any(part.startswith(".") for n in names for part in n.split("/")), names)
         self.assertIn("entries", self.result.stdout)
 
     def test_deploy_sh_keeps_its_executable_bit(self):

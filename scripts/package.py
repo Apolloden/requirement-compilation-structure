@@ -17,8 +17,9 @@ def agent_files(root: Path) -> list[tuple[Path, str]]:
     files = [(root / "main.py", "main.py"), (root / "requirements.txt", "requirements.txt")]
     for path in sorted((root / "arcflash").rglob("*")):
         rel = path.relative_to(root)
-        if (path.is_file() and "__pycache__" not in rel.parts and path.suffix != ".pyc"
-                and path.name != ".env" and not path.name.startswith(".env.")):
+        # no hidden files (.env, .DS_Store, ...), no caches
+        if path.is_file() and "__pycache__" not in rel.parts and path.suffix != ".pyc" \
+                and not any(part.startswith(".") for part in rel.parts):
             files.append((path, rel.as_posix()))
     return files
 
