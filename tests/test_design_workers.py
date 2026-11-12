@@ -158,3 +158,21 @@ class RunWorkers(unittest.TestCase):
         def worker(state, leaves, **_): raise KeyboardInterrupt()
         with self.assertRaises(KeyboardInterrupt):
             workers.run_workers(worker, {"skipped": []}, requirement_groups(lite_tree()), Mock())
+
+class WrongShapeRepairs(unittest.TestCase):                                  # Review Focus 3, found in the final review
+    def test_ui_step_list_of_the_wrong_shape_is_sent_back(self):
+        from design_fixtures import lite_contexts
+        tree = lite_tree(); state = ui_state(("REQ-1", "REQ-2"))
+        bad = answer("u_REQ-3"); bad["step_ui"][next(iter(bad["step_ui"]))] = "UI-page-form-save"
+        model = ReplayModel([bad, answer("u_REQ-3")])
+        workers.ui_worker(state, GROUPS["REQ-3"], tree, lite_contexts(tree), model, Mock())
+        self.assertEqual(model.calls, 2)
+        self.assertIn("must be an array of element IDs", model.requests[1][1]["correction"]["error"])
+
+    def test_malformed_conventions_are_sent_back_not_raised_after_acceptance(self):
+        tree = lite_tree(); state = data_state(("REQ-1",))
+        bad = answer("d_REQ-2"); bad["conventions"] = ["current user is anonymous"]
+        model = ReplayModel([bad, answer("d_REQ-2")])
+        workers.data_worker(state, GROUPS["REQ-2"], tree, model, Mock())
+        self.assertEqual(model.calls, 2)
+        self.assertIn("conventions", model.requests[1][1]["correction"]["error"])

@@ -140,7 +140,11 @@ def data_worker(state: dict, leaves: list[str], tree, model, console) -> dict:
         owners.update({leaf: answer["requirement_apis"][leaf] for leaf in leaves})
         # Every requirement accepted so far stays covered, also when this group changed a shared API.
         validate_design({"apis": merged, "requirements": owners}, obligations, complete=False, tree=tree)
-        return {"merged": merged, "owners": owners, "obligations": obligations}
+        conventions = state["conventions"]
+        for leaf in leaves:   # merged here so a malformed "conventions" answer is sent back for repair
+            record = obligations["requirements"][leaf]
+            conventions = merge_conventions(conventions, answer, leaf, record["read"] + record["write"])
+        return {"merged": merged, "owners": owners, "obligations": obligations, "conventions": conventions}
 
     accepted, answer = propose_json(model, D_INSTRUCTIONS, request, accept, console,
         "Plan D " + ", ".join(leaves), PLAN_ATTEMPTS)
@@ -148,8 +152,7 @@ def data_worker(state: dict, leaves: list[str], tree, model, console) -> dict:
     for leaf in leaves:
         updated["schema"]["requirements"][leaf] = deepcopy(answer["requirement_fields"][leaf])
         updated["backend"]["requirements"][leaf] = deepcopy(answer["requirement_apis"][leaf])
-        record = accepted["obligations"]["requirements"][leaf]
-        updated["conventions"] = merge_conventions(updated["conventions"], answer, leaf, record["read"] + record["write"])
+    updated["conventions"] = accepted["conventions"]
     updated["obligations"] = accepted["obligations"]
     updated["backend"]["apis"] = deepcopy(accepted["merged"])
     updated["done"]["data"] += [leaf for leaf in leaves if leaf not in updated["done"]["data"]]
@@ -237,6 +240,9 @@ def ui_worker(state: dict, leaves: list[str], tree, contexts: dict, model, conso
             listed = answer["requirement_ui"][leaf]
             if not isinstance(listed, list) or not listed:
                 problems.append(f"requirement_ui[{leaf}]: list the element IDs this requirement uses")
+        for sid in steps:
+            if not isinstance(answer["step_ui"][sid], list):
+                problems.append(f"step_ui[{sid}]: must be an array of element IDs ([] when the step uses none)")
         for key, listed in [*((leaf, answer["requirement_ui"][leaf]) for leaf in leaves),
                             *((sid, answer["step_ui"][sid]) for sid in steps)]:
             for uid in listed if isinstance(listed, list) else []:
