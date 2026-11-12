@@ -64,3 +64,12 @@ class Names(unittest.TestCase):
         plan["pages"]["page_form"]["requirements"] = ["REQ-3.1"]
         problems = check_artifacts(**data, plan=plan, skipped=frozenset({"REQ-3.1"}))
         self.assertFalse(any(PLACEHOLDER in p for p in problems))
+
+class RuntimeNameGuidance(unittest.TestCase):                                 # found in the paid plan-stage run
+    def test_unlisted_link_message_says_how_to_mark_a_runtime_name(self):
+        data = artifacts()
+        plan = derived_plan(data["ui"])
+        plan["naming"] = [entry for entry in plan["naming"] if entry["name"] != "Create New Book"]
+        message = next(p for p in check_artifacts(**data, plan=plan) if "'Create New Book'" in p)
+        self.assertIn("is not in the naming table", message)
+        self.assertIn("if its name is filled in at runtime, leave prop.label out and declare the value in data", message)

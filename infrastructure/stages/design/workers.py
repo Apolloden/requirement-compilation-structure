@@ -171,8 +171,9 @@ not change, repeat or re-create them. ui_plan.naming lists the names the require
 fix. An element for a listed control uses exactly that name, once per page: label for
 links, buttons, fields and regions; text for headings; placeholder with no label when
 the listed name is a placeholder. Every link or button you add must be listed in
-ui_plan.naming for its page, unless its name is filled in at runtime. Include every
-supplied requirement ID and step ID."""
+ui_plan.naming for its page, unless its name is filled in at runtime (a record's own
+title, for example): for such a control leave prop.label out and declare the value in
+data. Include every supplied requirement ID and step ID."""
 
 U_INSTRUCTIONS = GROUP_HEADER + "\n\n" + UI_INSTRUCTIONS + "\n\n" + U_OUTPUT
 

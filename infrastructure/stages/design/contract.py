@@ -293,7 +293,8 @@ def check_naming(ui, plan, problems, skipped=frozenset(), complete=None):
         known = {(entry.get("role"), entry.get("name")) for entry in listed}
         for uid, role, name in found:
             if role in ("link", "button") and (role, name) not in known:
-                problems.append(f"ui_design.pages.{pid}: {role} {name!r} ({uid}) is not in the naming table")
+                problems.append(f"ui_design.pages.{pid}: {role} {name!r} ({uid}) is not in the naming table; remove it, "
+                    "or, if its name is filled in at runtime, leave prop.label out and declare the value in data")
         if page_plan.get("layout") and not any((ui["elements"][uid].get("prop") or {}).get("layout") is True
                 for uid in page_subtree(ui, pid)):
             problems.append(f"ui_design.pages.{pid}: page shows the header but has no header elements")
