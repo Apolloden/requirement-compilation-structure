@@ -129,3 +129,32 @@ class TriggerWorker(unittest.TestCase):
         model = ReplayModel([bad, answer("t_REQ-2")])
         workers.trigger_worker(state, GROUPS["REQ-2"], tree, lite_contexts(tree), model, Mock())
         self.assertIn("UI-ghost", model.requests[1][1]["correction"]["error"])
+
+from infrastructure.stages.design.groups import requirement_groups
+
+class RunWorkers(unittest.TestCase):
+    def test_group_failure_falls_back_to_one_leaf_per_call(self):
+        calls = []
+        def worker(state, leaves, **_):
+            calls.append(list(leaves))
+            if len(leaves) > 1 or leaves == ["REQ-2.4"]:
+                raise RuntimeError("exhausted 3 proposals")
+            return {**state, "seen": state.get("seen", []) + leaves}
+        state = workers.run_workers(worker, {"skipped": []}, requirement_groups(lite_tree()), Mock())
+        self.assertEqual(calls, [["REQ-1.1"], ["REQ-2.1", "REQ-2.2", "REQ-2.3", "REQ-2.4", "REQ-2.5"],
+            ["REQ-2.1"], ["REQ-2.2"], ["REQ-2.3"], ["REQ-2.4"], ["REQ-2.5"], ["REQ-3.1", "REQ-3.2"],
+            ["REQ-3.1"], ["REQ-3.2"]])
+        self.assertEqual(state["skipped"], ["REQ-2.4"])
+        self.assertEqual(state["seen"], ["REQ-1.1", "REQ-2.1", "REQ-2.2", "REQ-2.3", "REQ-2.5", "REQ-3.1", "REQ-3.2"])
+
+    def test_skipped_leaves_are_left_out_of_later_workers(self):
+        calls = []
+        def worker(state, leaves, **_):
+            calls.append(list(leaves)); return state
+        workers.run_workers(worker, {"skipped": ["REQ-1.1", "REQ-2.2"]}, requirement_groups(lite_tree()), Mock())
+        self.assertEqual(calls, [["REQ-2.1", "REQ-2.3", "REQ-2.4", "REQ-2.5"], ["REQ-3.1", "REQ-3.2"]])
+
+    def test_interrupt_is_not_swallowed(self):
+        def worker(state, leaves, **_): raise KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            workers.run_workers(worker, {"skipped": []}, requirement_groups(lite_tree()), Mock())

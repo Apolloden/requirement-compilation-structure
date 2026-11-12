@@ -347,3 +347,35 @@ def trigger_worker(state: dict, leaves: list[str], tree, contexts: dict, model, 
     updated["triggers"] = merged
     updated["done"]["triggers"] += [leaf for leaf in leaves if leaf not in updated["done"]["triggers"]]
     return updated
+
+
+def run_workers(worker, state: dict, groups: list[dict], console, **arguments) -> dict:
+    """Run one worker kind over every group part, in order (spec 6, level 1).
+
+    A part that fails is retried once per leaf; a leaf that still fails is skipped: it gets
+    empty records later and loses its own tests, and nothing else stops."""
+    for part in groups:
+        leaves = [leaf for leaf in part["leaves"] if leaf not in state["skipped"]]
+        if not leaves:
+            continue
+        try:
+            state = worker(state, leaves, **arguments)
+            continue
+        except (RuntimeError, ValueError) as error:
+            if len(leaves) == 1:
+                state = skip(state, leaves[0], error, console)
+                continue
+        for leaf in leaves:
+            try:
+                state = worker(state, [leaf], **arguments)
+            except (RuntimeError, ValueError) as error:
+                state = skip(state, leaf, error, console)
+    return state
+
+
+def skip(state: dict, leaf: str, error: Exception, console) -> dict:
+    """Record a leaf whose own call failed; it is left out of every later worker call."""
+    console.show(f"Plan | skipped {leaf}: {error}", "Its records stay empty; the other requirements continue.")
+    if leaf in state["skipped"]:
+        return state
+    return {**state, "skipped": [*state["skipped"], leaf]}
