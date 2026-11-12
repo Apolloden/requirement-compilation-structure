@@ -2,13 +2,4 @@
 .env
 __pycache__/
 outputs/
-release/
-output/
-slides/
-docs/
-/scripts/*
-!/scripts/package.py
-
-AGENTS.md
-course_exercises/browser_testing/sessions/
-course_exercises/requirements_studio/sessions/
+*.zip

@@ -1,69 +1,20 @@
-"""Compile a requirement directory into an executable application."""
-
+"""ArcFlash entry point: python main.py <requirements-dir> --output-dir <out>."""
 import argparse
-from pathlib import Path
 import sys
 
-from infrastructure.compiler import Compiler, PIPELINE
-from infrastructure.utils.cli import resolve_directories
-from infrastructure.utils.presentation.logging import configure_console
-from infrastructure.utils.presentation.stages import stage_label
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="ArcFlash: generate a web application from a requirements folder.")
+    parser.add_argument("requirement_path", help="folder that holds requirements.yaml")
+    parser.add_argument("-o", "--output-dir", required=True, help="folder to write the generated application into")
+    return parser.parse_args(argv)
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Read public options and validate paths and the backend port before compilation."""
-    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Stages:\n" + "\n".join(
-            "  " + stage_label(name) + f"  (--stage {name})" for name, _, _ in PIPELINE))
-    parser.add_argument("requirement_path", type=Path,
-        help="Requirement directory containing requirements.yaml and reference assets")
-    parser.add_argument("-o", "--output-dir", type=Path, required=True,
-        help="Directory for the generated application and .arc artifacts")
-    parser.add_argument("--model-log", "--debug-model-io", dest="model_log", action="store_true",
-        help="Show detailed model I/O and save per-call prompt/response logs; usage and timing are always shown")
-    parser.add_argument("--port", type=int, default=3000,
-        help="Default generated backend port and frontend API proxy target (default: 3000)")
-    stages = parser.add_mutually_exclusive_group()
-    stages.add_argument("--stage", choices=[name for name, _, _ in PIPELINE], metavar="STAGE",
-        help="Restore the previous stage's completed checkpoint, clear build outputs, and run one stage")
-    stages.add_argument("--from-stage", choices=[name for name, _, _ in PIPELINE], metavar="STAGE",
-        help="Restore the previous stage's completed checkpoint, clear build outputs, and run from this stage to the end")
-    parser.add_argument("--pause", action="store_true", help="Wait for Enter after each display stage")
-    args = parser.parse_args(argv)
-    try:
-        if not 1 <= args.port <= 65535:
-            raise ValueError("--port must be between 1 and 65535")
-        args.requirement_path, args.output_dir = resolve_directories(
-            argparse.Namespace(input=args.requirement_path, output=args.output_dir))
-        if not args.requirement_path.is_dir():
-            raise ValueError(f"Input directory does not exist: {args.requirement_path}")
-        if not (args.requirement_path / "requirements.yaml").is_file():
-            raise ValueError(f"Missing requirement document: {args.requirement_path / 'requirements.yaml'}")
-        if args.output_dir.exists() and not args.output_dir.is_dir():
-            raise ValueError(f"Output must be a directory: {args.output_dir}")
-    except (OSError, ValueError) as error:
-        parser.error(str(error))
-    return args
-
-
-def main(argv: list[str] | None = None) -> None:
-    configure_console()
-    args = parse_args(argv)
-    compiler = Compiler(args.requirement_path, args.output_dir,
-        model_log=args.model_log, port=args.port, pause=args.pause)
-    try:
-        compiler.compile(stage=args.stage, from_stage=args.from_stage)
-    except KeyboardInterrupt:
-        print(f"Compilation interrupted at {compiler.current_stage or 'startup'}.", file=sys.stderr)
-        raise SystemExit(130)
-    except Exception as error:
-        print(f"Compilation failed at {compiler.current_stage or 'startup'}: {error}", file=sys.stderr)
-        raise SystemExit(0)
-    if compiler.report["status"] == "COMPLETED_WITH_FAILURES":
-        print(f"All passes completed. Report: {compiler.arc_dir / 'compilation.json'}", file=sys.stderr)
-        raise SystemExit(0)
+def main(argv=None) -> int:
+    parse_args(argv)
+    print("not implemented yet")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
