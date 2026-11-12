@@ -178,7 +178,9 @@ data. other_pages lists the controls and displays that already exist on pages ou
 call: when a step uses one of them (a link on another page that leads here, or a display
 of a value this requirement changes), list its existing ID in requirement_ui and step_ui
 and never re-create it. A listed radiogroup is a container whose prop.label is the group's
-name and whose children are inputs with input_type radio, one per option. Include every supplied
+name and whose children are inputs with input_type radio, one per option. A listed textbox
+is an input with input_type text, textarea, email, tel or url (not date or number), or a
+password input for a password. Include every supplied
 requirement ID and step ID."""
 
 U_INSTRUCTIONS = GROUP_HEADER + "\n\n" + UI_INSTRUCTIONS + "\n\n" + U_OUTPUT

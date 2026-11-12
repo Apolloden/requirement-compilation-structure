@@ -202,3 +202,8 @@ class CrossPageControls(unittest.TestCase):                                   # 
         self.assertEqual(request["other_pages"]["home"]["UI-recent-books-list"], {"type": "list", "data": ["workspace.recentlyViewedBooks"]})
         self.assertFalse(set(request["other_pages"]) & set(request["pages"]))
         self.assertIn("other_pages lists the controls and displays", model.requests[0][0])
+
+class TextboxInputs(unittest.TestCase):                                       # found in the paid runs on the sample input
+    def test_the_ui_prompt_says_which_inputs_are_text_boxes(self):
+        # Date fields came out as date inputs (no textbox role) in both sample runs and needed a repair round.
+        self.assertIn("A listed textbox is an input with input_type text, textarea, email, tel or url", workers.U_INSTRUCTIONS)
