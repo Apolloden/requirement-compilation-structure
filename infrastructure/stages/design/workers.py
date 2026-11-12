@@ -9,15 +9,17 @@ import re
 
 from infrastructure.pipeline.backend_apis import INSTRUCTIONS as API_INSTRUCTIONS
 from infrastructure.pipeline.db_obligations import INSTRUCTIONS as OBLIGATION_INSTRUCTIONS
-from infrastructure.shared.agent.conventions import CONVENTION_RULES, merge_conventions
+from infrastructure.shared.agent.conventions import CONVENTION_RULES, merge_conventions, select_conventions
 from infrastructure.shared.agent.proposals import propose_json
 from infrastructure.stages.backend.primitives import validate_design
-from infrastructure.stages.database.obligations.records import check_symbols, normalize_inference
+from infrastructure.stages.database.obligations.records import check_symbols, normalize_inference, normalize_obligations
 from infrastructure.stages.database.schema import check_related_fields
 from infrastructure.stages.design.contract import API_KEYS, check_naming, check_ui
 from infrastructure.stages.design.planner import (PLAN_ATTEMPTS, check_api_list, reject, requirement_records,
     ui_skeleton)
-from infrastructure.stages.frontend.triggers.design import empty_triggers
+from infrastructure.stages.frontend.triggers.design import (api_ids, apply_decomposition, empty_triggers,
+    relevant_pages, validate_coverage)
+from infrastructure.stages.frontend.triggers.prompts import INSTRUCTIONS as TRIGGER_INSTRUCTIONS
 from infrastructure.stages.frontend.ui.design import INSTRUCTIONS as UI_INSTRUCTIONS, apply_proposal, page_context
 
 GROUP_HEADER = """This call covers several requirements of one group. The rule texts below were written for
@@ -261,4 +263,87 @@ def ui_worker(state: dict, leaves: list[str], tree, contexts: dict, model, conso
     updated = deepcopy(state)
     updated["ui"] = design
     updated["done"]["ui"] += [leaf for leaf in leaves if leaf not in updated["done"]["ui"]]
+    return updated
+
+
+T_OUTPUT = """OUTPUT FORMAT
+{"triggers": {"TRIGGER-ID": {complete trigger record}},
+ "requirement_triggers": {"REQ-ID": ["TRIGGER-ID"]},
+ "step_triggers": {"STEP-ID": ["TRIGGER-ID"]}}
+Include every supplied requirement ID and step ID; use [] where none is needed."""
+
+T_INSTRUCTIONS = GROUP_HEADER + "\n\n" + TRIGGER_INSTRUCTIONS + "\n\n" + T_OUTPUT
+
+
+def full_obligations(state: dict, tree) -> dict:
+    """Normalized records for every requirement and step; a requirement without one (skipped) is empty."""
+    raw = state["obligations"]
+    return normalize_obligations({
+        "requirements": {rid: raw["requirements"].get(rid, EMPTY) for rid in tree.requirements},
+        "steps": {sid: raw["steps"].get(sid, EMPTY) for sid in tree.steps}}, tree)
+
+
+def trigger_worker(state: dict, leaves: list[str], tree, contexts: dict, model, console) -> dict:
+    """T: what each click, submit or page load does, for one group's requirements."""
+    steps = [sid for leaf in leaves for sid in tree.own_steps[leaf]]
+    ui, backend, triggers = state["ui"], state["backend"], state["triggers"]
+    obligations = full_obligations(state, tree)
+    pages = {}
+    for leaf in leaves:
+        pages.update(relevant_pages(ui, leaf))
+    on_pages = {uid for page in pages.values() for uid in page["elements"]}
+    existing = {tid: trigger for tid, trigger in triggers["triggers"].items() if trigger.get("source") in on_pages}
+    aids = {aid for leaf in leaves for aid in backend["requirements"].get(leaf, [])}
+    aids |= {aid for trigger in existing.values() for aid in api_ids(trigger)}
+    request = {"requirements": [{key: value for key, value in contexts[leaf].items() if key != "images"} for leaf in leaves],
+        "ui": pages,
+        "required_obligations": {leaf: obligations["requirements"][leaf] for leaf in leaves},
+        "step_obligations": {sid: obligations["steps"][sid] for sid in steps},
+        "existing_triggers": existing,
+        "backend_apis": {aid: backend["apis"][aid] for aid in sorted(aids) if aid in backend["apis"]},
+        "shared_conventions": select_conventions(state["conventions"], requirements=leaves)}
+
+    def accept(answer):
+        require_sections(answer, {"triggers": [], "requirement_triggers": leaves, "step_triggers": steps})
+        merged = triggers
+        for leaf in leaves:
+            merged = apply_decomposition(merged, {"triggers": answer["triggers"],
+                "requirement_triggers": answer["requirement_triggers"][leaf],
+                "step_triggers": {sid: answer["step_triggers"][sid] for sid in tree.own_steps[leaf]}}, leaf)
+        problems = []
+        for key, listed in [*((leaf, answer["requirement_triggers"][leaf]) for leaf in leaves),
+                            *((sid, answer["step_triggers"][sid]) for sid in steps)]:
+            if not isinstance(listed, list):
+                problems.append(f"{key}: must be an array of trigger IDs")
+                continue
+            for tid in listed:
+                if tid not in merged["triggers"]:
+                    problems.append(f"{key}: unknown trigger {tid}")
+        for tid, trigger in answer["triggers"].items():
+            where = f"triggers.{tid}"
+            if not isinstance(trigger, dict):
+                problems.append(f"{where}: must be a trigger record")
+                continue
+            if trigger.get("source") not in ui["elements"]:
+                problems.append(f"{where}: source {trigger.get('source')!r} is not a UI element")
+            if not isinstance(trigger.get("action"), list):
+                problems.append(f"{where}: action must be an ordered array of api or ui actions")
+                continue
+            for action in trigger["action"]:
+                kind = action.get("kind") if isinstance(action, dict) else None
+                if kind == "api" and action.get("api") not in backend["apis"]:
+                    problems.append(f"{where}: unknown API {action.get('api')!r}")
+                elif kind == "ui" and action.get("ui") not in ui["elements"]:
+                    problems.append(f"{where}: unknown UI element {action.get('ui')!r}")
+                elif kind not in ("api", "ui"):
+                    problems.append(f"{where}: action kind must be api or ui")
+        reject(problems)
+        covered = [leaf for leaf in [*state["done"]["triggers"], *leaves] if ui["requirements"].get(leaf)]
+        validate_coverage(merged, backend, obligations, tree, covered)
+        return merged
+
+    merged, _ = propose_json(model, T_INSTRUCTIONS, request, accept, console, "Plan T " + ", ".join(leaves), PLAN_ATTEMPTS)
+    updated = deepcopy(state)
+    updated["triggers"] = merged
+    updated["done"]["triggers"] += [leaf for leaf in leaves if leaf not in updated["done"]["triggers"]]
     return updated

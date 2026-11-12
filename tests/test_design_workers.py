@@ -104,3 +104,28 @@ class UiWorker(unittest.TestCase):
     def test_requirement_without_ui_is_rejected(self):
         error = self.run_bad("REQ-3", lambda a: a["requirement_ui"].update({"REQ-3.2": []}), ("REQ-1", "REQ-2"))
         self.assertIn("REQ-3.2", error)
+
+def full_state():
+    from design_fixtures import lite_contexts
+    tree = lite_tree(); state = ui_state()
+    for gid in GROUPS:
+        state = workers.trigger_worker(state, GROUPS[gid], tree, lite_contexts(tree), ReplayModel([answer(f"t_{gid}")]), Mock())
+    return state
+
+class TriggerWorker(unittest.TestCase):
+    def test_real_answers_reproduce_the_triggers(self):
+        from design_fixtures import load
+        expected = load("expected/frontend_triggers.json")
+        state = full_state()
+        self.assertEqual(state["triggers"]["triggers"], expected["triggers"])
+        self.assertEqual(state["triggers"]["requirements"], expected["requirements"])
+
+    def test_unknown_api_and_dangling_source_are_sent_back(self):
+        from design_fixtures import lite_contexts
+        tree = lite_tree(); state = ui_state()
+        state = workers.trigger_worker(state, GROUPS["REQ-1"], tree, lite_contexts(tree), ReplayModel([answer("t_REQ-1")]), Mock())
+        bad = answer("t_REQ-2")
+        first = next(iter(bad["triggers"].values())); first["source"] = "UI-ghost"
+        model = ReplayModel([bad, answer("t_REQ-2")])
+        workers.trigger_worker(state, GROUPS["REQ-2"], tree, lite_contexts(tree), model, Mock())
+        self.assertIn("UI-ghost", model.requests[1][1]["correction"]["error"])
