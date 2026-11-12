@@ -3,8 +3,12 @@
 Each call sees every requirement at once, so shared decisions (one table per concept, one
 route per page, one name per control) are made once instead of once per requirement."""
 
+from copy import deepcopy
+
 from infrastructure.shared.agent.proposals import propose_json
 from infrastructure.stages.design.contract import METHODS, check_entities, route_key
+from infrastructure.stages.design.names import ROLES, element_name, element_role
+from infrastructure.stages.frontend.ui.design import normalize_design
 
 PLAN_ATTEMPTS = 3
 PLAN_OUTPUT_CAP = 32000
@@ -104,3 +108,174 @@ def plan_data(tree, model, console) -> dict:
     request = {"global_rules": global_rules(tree), "requirements": requirement_records(tree, tree.leaves)}
     plan, _ = propose_json(model, P1_INSTRUCTIONS, request, accept_data_plan, console, "Plan P1 data", PLAN_ATTEMPTS)
     return plan
+
+
+P2_INSTRUCTIONS = """Plan the user interface for the WHOLE application in one answer. Later calls design the
+elements of each page and may not change routes, the shared header or names.
+
+Return one JSON object: {"pages": {...}, "layout": {"elements": {...}}, "naming": [...]}.
+
+pages maps PAGE IDs (lower-case letters, digits and underscores) to
+{"name", "route", "images", "layout", "requirements"}. route is a URL path starting with
+"/"; parameters are written ":name". Use each route once. images lists supplied image IDs;
+keep each image's page hint. layout is true when the page shows the shared header.
+requirements lists the leaf requirement IDs whose behavior happens on this page. Every
+leaf requirement appears on at least one page.
+
+layout.elements is the shared header and navigation, designed once: a map of ELEMENT IDs
+("UI-layout-...") to {type, parent, mode, data, prop}, the same format as page elements.
+A top-level header element has parent null. Put a control here only when the requirements
+say it is available across pages. Return {"elements": {}} when there is no shared header.
+
+naming lists every control the requirement text names:
+{"name": exact text, "role": link, button, heading, textbox, combobox, checkbox or region,
+ "pages": [PAGE IDs]}.
+- Copy names exactly: spelling, case and punctuation.
+- A role annotation such as "Save"(role=button) fixes the role. Otherwise choose the role
+  the wording implies: something that navigates is a link, something that acts is a button.
+- A field the requirement names by its placeholder is listed under that placeholder text.
+- A name appears at most once per role on a page. If a header control and a page control
+  would share a role and name, keep the header control only.
+- Do not list names that are filled in at runtime, such as a record's own title.
+
+Links, buttons and fields come from the requirement text. Reference images decide
+arrangement and style only: do not add a control because a screenshot shows one.
+"""
+
+
+def layout_element_id(pid: str, lid: str) -> str:
+    """The ID of a header element's copy on one page, for example UI-home-layout-header."""
+    return "UI-" + pid + "-" + lid.removeprefix("UI-")
+
+
+def header_controls(ui_plan: dict) -> list[tuple[str, str, str]]:
+    """(header element ID, role, name) for every header element a browser test could look up."""
+    regions = {entry.get("name") for entry in ui_plan.get("naming", []) if entry.get("role") == "region"}
+    found = []
+    for lid, node in ui_plan["layout"]["elements"].items():
+        role, name = element_role(node, regions), element_name(node)
+        if role and name:
+            found.append((lid, role, name))
+    return found
+
+
+def check_ui_plan(answer, tree, images) -> None:
+    """P2 accept rules; raises one ValueError that lists every problem."""
+    if not isinstance(answer, dict):
+        raise ValueError('Return one JSON object {"pages": {...}, "layout": {"elements": {...}}, "naming": [...]}')
+    pages, layout, naming = answer.get("pages"), answer.get("layout"), answer.get("naming")
+    problems = []
+    if not isinstance(pages, dict) or not pages or not all(isinstance(page, dict) for page in pages.values()):
+        problems.append("pages must be a non-empty object of PAGE ID to page record")
+        pages = {}
+    if not isinstance(layout, dict) or not isinstance(layout.get("elements"), dict):
+        problems.append('layout must be {"elements": {...}} (use {} when there is no shared header)')
+        layout = {"elements": {}}
+    if not isinstance(naming, list) or not all(isinstance(entry, dict) for entry in naming):
+        problems.append("naming must be an array of {name, role, pages} objects")
+        naming = []
+    header = layout["elements"]
+    routes, placed = {}, set()
+    for pid, page in pages.items():
+        route = page.get("route")
+        if not isinstance(route, str) or not route.startswith("/"):
+            problems.append(f"pages.{pid}: route {route!r} must start with /")
+        elif route in routes:
+            problems.append(f"pages.{pid}: same route as {routes[route]} ({route}); use each route once")
+        else:
+            routes[route] = pid
+        for iid in page.get("images") or []:
+            if iid not in images:
+                problems.append(f"pages.{pid}: unknown image {iid}")
+        listed = page.get("requirements")
+        if not isinstance(listed, list):
+            problems.append(f"pages.{pid}: requirements must be an array of leaf requirement IDs")
+            listed = []
+        for rid in listed:
+            if rid not in tree.leaves:
+                problems.append(f"pages.{pid}: {rid} is not a leaf requirement ID")
+            placed.add(rid)
+        if not isinstance(page.get("layout", False), bool):
+            problems.append(f"pages.{pid}: layout must be true or false")
+        elif page.get("layout") and not header:
+            problems.append(f"pages.{pid}: layout is true but layout.elements is empty; design the shared header "
+                "or set layout false")
+    for rid in tree.leaves:
+        if rid not in placed:
+            problems.append(f"requirement {rid} is on no page; list it in the requirements of the page where it happens")
+    seen = {}
+    for index, entry in enumerate(naming):
+        name, role, entry_pages = entry.get("name"), entry.get("role"), entry.get("pages")
+        where = f"naming[{index}]"
+        if role not in ROLES:
+            problems.append(f"{where}: role {role!r} is not one of {list(ROLES)}")
+        if not isinstance(name, str) or not name.strip():
+            problems.append(f"{where}: name must be the exact non-empty text")
+        if not isinstance(entry_pages, list) or not entry_pages:
+            problems.append(f"{where}: pages must list the PAGE IDs where {name!r} appears")
+            continue
+        for pid in entry_pages:
+            if pid not in pages:
+                problems.append(f"{where}: unknown page {pid!r}")
+            key = (role, name, pid)
+            if key in seen:
+                problems.append(f"{where}: {role} {name!r} is listed twice for page {pid} (also naming[{seen[key]}])")
+            seen.setdefault(key, index)
+    for lid, node in header.items():
+        if not isinstance(node, dict):
+            problems.append(f"layout.elements.{lid}: must be an element record")
+            continue
+        parent = node.get("parent")
+        if parent is not None and parent not in header:
+            problems.append(f"layout.elements.{lid}: parent must be null or another layout element, not {parent!r}")
+    header_pages = [pid for pid, page in pages.items() if page.get("layout") is True]
+    for lid, role, name in header_controls({"layout": {"elements": {k: v for k, v in header.items() if isinstance(v, dict)}},
+                                            "naming": naming}):
+        for pid in header_pages:
+            if (role, name, pid) in seen:
+                problems.append(f"layout.elements.{lid}: header {role} {name!r} repeats naming[{seen[(role, name, pid)]}] "
+                    f"on header page {pid}; keep the header control only and remove {pid} from that naming entry")
+    reject(problems)
+
+
+def plan_ui(tree, contexts: dict, images: dict, data_plan: dict, model, console) -> dict:
+    """P2: pages and routes, the shared header (designed once) and the naming table."""
+    request = {"global_rules": global_rules(tree),
+        "requirements": [contexts[leaf] for leaf in tree.leaves],
+        "images": {iid: {"page": image.get("page"), "analysis": image.get("analysis", {})} for iid, image in images.items()},
+        "apis": {aid: {"description": api["description"], "signature": api["signature"]}
+            for aid, api in data_plan["apis"].items()}}
+
+    def accept(answer):
+        check_ui_plan(answer, tree, images)
+        return {"pages": answer["pages"], "layout": answer["layout"], "naming": answer["naming"]}
+
+    ui_plan, _ = propose_json(model, P2_INSTRUCTIONS, request, accept, console, "Plan P2 UI", PLAN_ATTEMPTS)
+    ui_plan = deepcopy(ui_plan)
+    header_pages = [pid for pid, page in ui_plan["pages"].items() if page.get("layout") is True]
+    listed = {(entry["role"], entry["name"]) for entry in ui_plan["naming"]}
+    for _, role, name in header_controls(ui_plan):
+        if role in ("link", "button") and (role, name) not in listed and header_pages:
+            ui_plan["naming"].append({"name": name, "role": role, "pages": list(header_pages)})
+            listed.add((role, name))
+    return ui_plan
+
+
+def ui_skeleton(ui_plan: dict, tree) -> dict:
+    """A UI design holding every page root and, on header pages, a copy of the shared header."""
+    design = {"pages": {}, "elements": {}, "requirements": {rid: [] for rid in tree.requirements},
+        "steps": {sid: [] for sid in tree.steps}}
+    header = ui_plan.get("layout", {}).get("elements", {})
+    for pid, page in ui_plan["pages"].items():
+        root = f"UI-{pid}"
+        design["pages"][pid] = {"name": page.get("name", pid), "route": page["route"], "root": root,
+            "images": list(page.get("images") or [])}
+        design["elements"][root] = {"type": "page", "parent": None, "mode": [], "data": [], "prop": {}}
+        if page.get("layout") is True:
+            for lid, node in header.items():
+                copy = deepcopy(node)
+                parent = node.get("parent")
+                copy["parent"] = root if parent is None else layout_element_id(pid, parent)
+                copy["prop"] = {**(copy.get("prop") or {}), "layout": True}
+                design["elements"][layout_element_id(pid, lid)] = copy
+    return normalize_design(design, tree)
