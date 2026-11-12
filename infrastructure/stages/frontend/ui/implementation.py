@@ -12,7 +12,7 @@ from infrastructure.shared.agent.discovery import project_index
 from infrastructure.shared.agent.loop import run_file_agent
 from infrastructure.shared.agent.recovery import implementation_task, final_checks, complete_report
 from infrastructure.shared.project.entrypoints import selected_path
-from infrastructure.stages.frontend.ui.design import owners, page_context
+from infrastructure.stages.frontend.ui.design import owners, page_context, page_elements
 from infrastructure.stages.frontend.ui.runtime import APPLICATION_ENTRYPOINTS, prepare_frontend
 from infrastructure.stages.frontend.ui.testing import FrontendChecks, existence_suite, require_green, test_path
 from infrastructure.shared.project.dependencies import install_dependencies
@@ -72,6 +72,44 @@ control/data-key assertions. Shared test/build infrastructure remains read-only.
 """
 
 
+LAYOUT_PATH = "frontend/src/Layout.tsx"
+
+LAYOUT_RULE = """SHARED HEADER
+task.layout_elements lists this page's shared header elements (prop.layout is true in the
+design). They are rendered by ONE layout component in frontend/src/Layout.tsx, which the
+application renders once around whichever page is shown. If that file does not exist yet,
+create it and wire it into the application. It takes the current page ID and sets
+data-testid to each header element's ID for that page. Page components must not render
+header elements or their own copy of the header or navigation, and must not add another
+link or button with a header control's name."""
+
+
+def is_layout(node: dict) -> bool:
+    return (node.get("prop") or {}).get("layout") is True
+
+
+def layout_elements(design: dict, pid: str) -> list[str]:
+    """The page's shared header elements (copies made by the plan stage), in design order."""
+    on_page = page_elements(design, pid)
+    return [uid for uid, node in design["elements"].items() if uid in on_page and is_layout(node)]
+
+
+def page_instructions(design: dict) -> str:
+    """Today's instructions, plus the shared-header rule when the design has a shared header."""
+    if any(is_layout(node) for node in design["elements"].values()):
+        return INSTRUCTIONS + "\n" + LAYOUT_RULE
+    return INSTRUCTIONS
+
+
+def page_references(output: Path, relative_test: str) -> list[str]:
+    """Files every page task can read; the layout component joins them once it exists."""
+    references = ["frontend/src/ui-runtime.ts", relative_test, "frontend/package.json",
+        "frontend/tsconfig.json", "frontend/playwright.ui.config.ts", *APPLICATION_ENTRYPOINTS]
+    if (Path(output) / LAYOUT_PATH).is_file():
+        references.append(LAYOUT_PATH)
+    return references
+
+
 def implement_ui(arc_dir: Path, design: dict, model, console, report: dict, max_turns: int = 10,
         images: dict | None = None, requirement_contexts: dict | None = None) -> dict:
     """Implement the complete saved UI/data design through component-existence TDD.
@@ -97,6 +135,7 @@ def implement_ui(arc_dir: Path, design: dict, model, console, report: dict, max_
     # The plan stage writes ui_plan.json; with it the tests also check names strictly (classic path: none).
     plan_path = arc_dir / "ui_plan.json"
     plan = json.loads(plan_path.read_text(encoding="utf-8")) if plan_path.is_file() else None
+    instructions = page_instructions(design)
     for number, pid in enumerate(design["pages"], 1):
         uses = owners(design, pid)
         relative = test_path(pid)
@@ -146,11 +185,11 @@ def implement_ui(arc_dir: Path, design: dict, model, console, report: dict, max_
                         for rid in uses],
                     "visual_references": {iid: (images or {})[iid] for iid in design["pages"][pid]["images"]},
                     "implementation_path": selected_path(output, "page", pid)}
-                workspace = selection.workspace(target=("page", pid),
-                    references=["frontend/src/ui-runtime.ts", relative, "frontend/package.json",
-                        "frontend/tsconfig.json", "frontend/playwright.ui.config.ts", *APPLICATION_ENTRYPOINTS])
+                if instructions != INSTRUCTIONS:
+                    context["layout_elements"] = layout_elements(design, pid)
+                workspace = selection.workspace(target=("page", pid), references=page_references(output, relative))
                 report["pages"][pid]["status"] = "IMPLEMENTING"
-                agent = run_file_agent(model, INSTRUCTIONS, context, workspace, implementation_gate,
+                agent = run_file_agent(model, instructions, context, workspace, implementation_gate,
                     max_turns, console, label + " / Implementation", feedback=current,
                     feedback_filter=lambda value: selection.feedback(workspace, value), context_index=context_index)
             accepted.append(pid)
