@@ -242,9 +242,12 @@ def check_duplicate_controls(ui, problems):
                     "strict browser tests need one")
 
 
-def check_naming(ui, plan, problems, skipped=frozenset()):
+def check_naming(ui, plan, problems, skipped=frozenset(), complete=None):
     """With a naming table: every listed control exists exactly once, with exactly its name, on
-    each page that lists it; every fixed-name link or button is listed; header pages hold the header."""
+    each page that lists it; every fixed-name link or button is listed; header pages hold the header.
+
+    complete limits the "missing control" report to those page IDs (None: every page); the plan
+    workers use it while pages are still being filled in."""
     if not all(isinstance(ui.get(key), dict) for key in ("pages", "elements")):
         return
     plan_pages = plan.get("pages") or {}
@@ -253,7 +256,8 @@ def check_naming(ui, plan, problems, skipped=frozenset()):
         page_plan = plan_pages.get(pid) or {}
         found = named_elements(ui, pid, plan)
         listed = [entry for entry in naming if pid in (entry.get("pages") or [])]
-        exempt = any(rid in skipped for rid in page_plan.get("requirements") or [])
+        exempt = any(rid in skipped for rid in page_plan.get("requirements") or []) or (
+            complete is not None and pid not in complete)
         for entry in listed:
             role, name = entry.get("role"), entry.get("name")
             uids = [uid for uid, found_role, found_name in found if (found_role, found_name) == (role, name)]

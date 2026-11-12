@@ -5,6 +5,7 @@ plan state is one dict passed from worker to worker; a worker returns a new dict
 changes the one it receives, so a failed call leaves the earlier state intact."""
 
 from copy import deepcopy
+import re
 
 from infrastructure.pipeline.backend_apis import INSTRUCTIONS as API_INSTRUCTIONS
 from infrastructure.pipeline.db_obligations import INSTRUCTIONS as OBLIGATION_INSTRUCTIONS
@@ -13,9 +14,11 @@ from infrastructure.shared.agent.proposals import propose_json
 from infrastructure.stages.backend.primitives import validate_design
 from infrastructure.stages.database.obligations.records import check_symbols, normalize_inference
 from infrastructure.stages.database.schema import check_related_fields
-from infrastructure.stages.design.contract import API_KEYS
-from infrastructure.stages.design.planner import PLAN_ATTEMPTS, check_api_list, reject, requirement_records
+from infrastructure.stages.design.contract import API_KEYS, check_naming, check_ui
+from infrastructure.stages.design.planner import (PLAN_ATTEMPTS, check_api_list, reject, requirement_records,
+    ui_skeleton)
 from infrastructure.stages.frontend.triggers.design import empty_triggers
+from infrastructure.stages.frontend.ui.design import INSTRUCTIONS as UI_INSTRUCTIONS, apply_proposal, page_context
 
 GROUP_HEADER = """This call covers several requirements of one group. The rule texts below were written for
 one requirement at a time: apply them to each supplied requirement. Where they describe a
@@ -148,4 +151,114 @@ def data_worker(state: dict, leaves: list[str], tree, model, console) -> dict:
     updated["obligations"] = accepted["obligations"]
     updated["backend"]["apis"] = deepcopy(accepted["merged"])
     updated["done"]["data"] += [leaf for leaf in leaves if leaf not in updated["done"]["data"]]
+    return updated
+
+
+U_OUTPUT = """OUTPUT FORMAT
+{"elements": {"ELEMENT-ID": {type, parent, mode, data, prop}},
+ "pages": {},
+ "requirement_ui": {"REQ-ID": ["ELEMENT-ID"]},
+ "step_ui": {"STEP-ID": ["ELEMENT-ID"]}}
+Pages and routes are fixed by ui_plan: return pages as {} and attach every element to a
+supplied page root or to an element under it. Elements with prop.layout true are the
+shared header: use their IDs in requirement_ui and step_ui when a step uses them, but do
+not change, repeat or re-create them. ui_plan.naming lists the names the requirements
+fix. An element for a listed control uses exactly that name, once per page: label for
+links, buttons, fields and regions; text for headings; placeholder with no label when
+the listed name is a placeholder. Every link or button you add must be listed in
+ui_plan.naming for its page, unless its name is filled in at runtime. Include every
+supplied requirement ID and step ID."""
+
+U_INSTRUCTIONS = GROUP_HEADER + "\n\n" + UI_INSTRUCTIONS + "\n\n" + U_OUTPUT
+
+
+def with_ui_plan(state: dict, ui_plan: dict, tree) -> dict:
+    """The state after P2: the UI plan and a design holding page roots and header copies."""
+    updated = deepcopy(state)
+    updated["ui_plan"] = deepcopy(ui_plan)
+    updated["ui"] = ui_skeleton(ui_plan, tree)
+    return updated
+
+
+def call_pages(state: dict, leaves: list[str]) -> list[str]:
+    """Pages whose plan lists one of these requirements."""
+    return [pid for pid, page in state["ui_plan"]["pages"].items()
+        if set(page.get("requirements") or []) & set(leaves) and pid in state["ui"]["pages"]]
+
+
+def mentions(problem: str, ids) -> bool:
+    """True when a problem text names one of the IDs as a whole word (UI-a does not match UI-a-b)."""
+    return any(re.search(r"(?<![\w-])" + re.escape(uid) + r"(?![\w-])", problem) for uid in ids)
+
+
+def ui_worker(state: dict, leaves: list[str], tree, contexts: dict, model, console) -> dict:
+    """U: page elements for one group's requirements, inside the pages, header and names of the UI plan."""
+    steps = [sid for leaf in leaves for sid in tree.own_steps[leaf]]
+    ui, ui_plan = state["ui"], state["ui_plan"]
+    pages = call_pages(state, leaves)
+    request = {"requirements": [contexts[leaf] for leaf in leaves],
+        "ui_plan": {"pages": ui_plan["pages"], "naming": ui_plan["naming"]},
+        "pages": {pid: page_context(ui, pid) for pid in pages}}
+    roots = {page["root"] for page in ui["pages"].values()}
+    header = {uid for uid, node in ui["elements"].items() if (node.get("prop") or {}).get("layout") is True}
+
+    def accept(answer):
+        if isinstance(answer, dict) and answer.get("pages") not in (None, {}):
+            raise ValueError("Pages are fixed by the UI plan; return pages as {}")
+        require_sections(answer, {"elements": [], "requirement_ui": leaves, "step_ui": steps})
+        problems = []
+        returned = answer["elements"]
+        for uid, node in returned.items():
+            if uid in roots or uid in header:
+                problems.append(f"elements.{uid}: is a page root or a shared header element; do not return it")
+            elif not isinstance(node, dict):
+                problems.append(f"elements.{uid}: must be an element record")
+            elif (node.get("prop") or {}).get("layout"):
+                problems.append(f"elements.{uid}: prop.layout is reserved for the shared header")
+        reject(problems)
+        merged = {**ui["elements"], **returned}
+        for uid in returned:
+            parent, seen = returned[uid].get("parent"), {uid}
+            while parent is not None and parent not in roots:
+                if parent not in merged:
+                    problems.append(f"elements.{uid}: parent chain reaches unknown element {parent}")
+                    break
+                if parent in seen:
+                    problems.append(f"elements.{uid}: parent cycle")
+                    break
+                seen.add(parent)
+                parent = merged[parent].get("parent")
+            else:
+                if parent is None:
+                    problems.append(f"elements.{uid}: parent must be a supplied page root or an element under it")
+        for leaf in leaves:
+            listed = answer["requirement_ui"][leaf]
+            if not isinstance(listed, list) or not listed:
+                problems.append(f"requirement_ui[{leaf}]: list the element IDs this requirement uses")
+        for key, listed in [*((leaf, answer["requirement_ui"][leaf]) for leaf in leaves),
+                            *((sid, answer["step_ui"][sid]) for sid in steps)]:
+            for uid in listed if isinstance(listed, list) else []:
+                if uid not in merged:
+                    problems.append(f"{key}: unknown element {uid}")
+        reject(problems)
+        design = ui
+        for leaf in leaves:
+            design = apply_proposal(design, {"pages": {}, "elements": returned,
+                "requirement_ui": answer["requirement_ui"][leaf],
+                "step_ui": {sid: answer["step_ui"][sid] for sid in tree.own_steps[leaf]}}, leaf, tree)
+        found = []
+        images = {iid for page in design["pages"].values() for iid in page.get("images", [])}
+        check_ui(design, tree, images, found)
+        problems += [problem for problem in found if mentions(problem, returned)]
+        finished = set(state["done"]["ui"]) | set(leaves)
+        complete = {pid for pid in pages
+            if set(ui_plan["pages"][pid].get("requirements") or []) <= finished}
+        check_naming(design, ui_plan, problems, frozenset(state["skipped"]), complete=complete)
+        reject(problems)
+        return design
+
+    design, _ = propose_json(model, U_INSTRUCTIONS, request, accept, console, "Plan U " + ", ".join(leaves), PLAN_ATTEMPTS)
+    updated = deepcopy(state)
+    updated["ui"] = design
+    updated["done"]["ui"] += [leaf for leaf in leaves if leaf not in updated["done"]["ui"]]
     return updated
