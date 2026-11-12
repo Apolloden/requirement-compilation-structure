@@ -51,23 +51,27 @@ def guarded(problems, label, check):
         problems.append(f"{label}: {type(error).__name__}: {error}")
 
 
-def check_schema(schema, tree, problems):
-    entities = schema.get("entities")
+def check_entities(entities, problems):
+    """Entity and field rules: SQL names, field types and flags, references, a primary key, table order."""
     if not isinstance(entities, dict) or not entities:
         problems.append("db_schema: entities must be a non-empty object")
-        return
-    symbols = {f"{entity}.{field}" for entity, definition in entities.items() for field in definition.get("fields", {})}
+        return False
+    symbols = {f"{entity}.{field}" for entity, definition in entities.items() if isinstance(definition, dict)
+        for field in (definition.get("fields") or {})}
     for entity, definition in entities.items():
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entity):
             problems.append(f"db_schema: entity name {entity!r} is not an SQL identifier")
-        fields = definition.get("fields")
+        fields = definition.get("fields") if isinstance(definition, dict) else None
         if not isinstance(fields, dict) or not fields:
             problems.append(f"db_schema: {entity} has no fields")
             continue
-        if not any(field.get("primary_key") is True for field in fields.values()):
+        if not any(isinstance(field, dict) and field.get("primary_key") is True for field in fields.values()):
             problems.append(f"db_schema: {entity} has no primary key")
         for name, field in fields.items():
             where = f"db_schema: {entity}.{name}"
+            if not isinstance(field, dict):
+                problems.append(f"{where}: field must be an object")
+                continue
             if field.get("type") not in FIELD_TYPES:
                 problems.append(f"{where}: type {field.get('type')!r} is not one of {sorted(FIELD_TYPES)}")
             for flag in ("nullable", "primary_key", "unique"):
@@ -78,10 +82,21 @@ def check_schema(schema, tree, problems):
                 problems.append(f"{where}: references unknown field {reference!r}")
             if not isinstance(field.get("constraints", []), list):
                 problems.append(f"{where}: constraints must be an array")
+    guarded(problems, "db_schema: table order", lambda: implementation_groups({"entities": entities}))
+    return True
+
+
+def check_schema(schema, tree, problems):
+    if not check_entities(schema.get("entities"), problems):
+        return
     for rid in tree.leaves:
         guarded(problems, f"db_schema.requirements[{rid}]",
             lambda: check_related_fields(schema, schema.get("requirements", {})[rid]))
-    guarded(problems, "db_schema: table order", lambda: implementation_groups(schema))
+
+
+def route_key(method, path):
+    """Method and path with path parameters made equal, so /books/{id} and /books/:bookId clash."""
+    return (method, re.sub(r"\{[^}]+\}|:[A-Za-z_]+", "{}", str(path)))
 
 
 def check_obligations(raw, schema, tree, problems):
@@ -131,7 +146,7 @@ def check_backend(backend, schema, obligations, tree, problems):
             problems.append(f"backend_apis.{aid}: method {method!r} is not one of {sorted(METHODS)}")
         if not isinstance(path, str) or not path.startswith("/api/"):
             problems.append(f"backend_apis.{aid}: path {path!r} must start with /api/")
-        key = (method, re.sub(r"\{[^}]+\}|:[A-Za-z_]+", "{}", str(path)))
+        key = route_key(method, path)
         if key in seen:
             problems.append(f"backend_apis.{aid}: same method and path as {seen[key]}")
         seen[key] = aid
