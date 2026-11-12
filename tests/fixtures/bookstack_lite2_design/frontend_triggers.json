@@ -1,0 +1,438 @@
+{
+  "triggers": {
+    "TR-home-load-books": {
+      "source": "UI-home",
+      "event": "mount",
+      "guard": null,
+      "read": [],
+      "write": [
+        "home.recentBooks"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-list-books",
+          "description": "On entering or reloading the public workspace at /, call listBooks without authentication or request parameters. On success, transform response.books into an array of {id, title} objects and assign it to home.recentBooks so persisted books can be rendered; an empty books array is valid and leaves the list empty. On rejection, do not block anonymous access and leave the current frontend book state unchanged."
+        }
+      ]
+    },
+    "TR-books-load-books": {
+      "source": "UI-books-page",
+      "event": "mount",
+      "guard": null,
+      "read": [],
+      "write": [
+        "books.items"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-list-books",
+          "description": "On entering or reloading the Books page at /books, call listBooks without authentication or request parameters. On success, transform response.books into an array of objects with id taken from each book's id and name taken from each book's full title, then assign the resulting array to books.items so every persisted book appears exactly once in the Book list and each is rendered by UI-book-item as a keyboard-accessible opening entry identified by its business name. An empty books array is valid and leaves the list empty. On rejection, do not block access to the Books page and leave the current books.items state unchanged."
+        }
+      ]
+    },
+    "TR-book-open-detail": {
+      "source": "UI-book-item",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "books.items"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Identify the activated book entry from books.items using the clicked UI-book-item row/object identity. Navigate to the Book page at /books/{entry.id}, using that entry's unique id as the bookId route parameter. Do not change the existing books.items list state."
+        }
+      ]
+    },
+    "TR-book-load-detail": {
+      "source": "UI-book-page",
+      "event": "mount",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [
+        "book.id",
+        "book.name",
+        "book.description",
+        "pageList.entries"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-book",
+          "description": "On entering or reloading the Book page at /books/:bookId, obtain bookId from the route parameter (using the page's book.id as the selected book identity) and call getBook with that bookId. On success, set book.id from response.book.id, set book.name from response.book.title for the detail heading, set book.description from response.book.description (using the saved value, including an empty/null description when none was saved), and transform response.book.pages into pageList.entries as objects with id and title. On a 404 book_not_found rejection, leave the detail fields empty/unavailable and do not fabricate saved name, description, or page entries."
+        }
+      ]
+    },
+    "TR-book-form-save": {
+      "source": "UI-book-form-save",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "bookDraft.name",
+        "bookDraft.description",
+        "bookDraft.tags"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-create-book",
+          "description": "On Save Book, submit createBook anonymously with title from bookDraft.name, description from bookDraft.description, and tags converted from the comma-separated bookDraft.tags string by splitting on commas, trimming whitespace, and dropping empty entries. This creates exactly one book. On 201, retain response.book.id for the following navigation action; do not use the form draft as the persisted detail source. On 400 invalid_title or 409 book_title_exists, stay on the create form, surface the validation or duplicate error, and do not navigate or create a second book."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "After a successful createBook response, navigate to the Book page at /books/{bookId} using bookId from the 201 response.book.id. The destination page root UI-book-page then runs its existing mount trigger TR-book-load-detail to reload the persisted book name and description, so the saved heading and description are shown from persisted data."
+        }
+      ]
+    },
+    "TR-book-form-cancel": {
+      "source": "UI-book-form-cancel",
+      "event": "click",
+      "guard": null,
+      "read": [],
+      "write": [
+        "bookDraft.name",
+        "bookDraft.description",
+        "bookDraft.tags"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-books-page",
+          "description": "Cancel returns to Books without calling createBook or any write API. Discard the unsaved bookDraft.name, bookDraft.description, and bookDraft.tags values so the pending book is not created and cannot be submitted later; navigate to the Books page at /books. The existing Books page mount trigger TR-books-load-books reloads persisted books, so the cancelled title does not appear unless it already existed."
+        }
+      ]
+    },
+    "TR-book-edit-load": {
+      "source": "UI-book-edit-page",
+      "event": "mount",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [
+        "book.id",
+        "bookEdit.name",
+        "bookEdit.description",
+        "bookEdit.tags"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-book",
+          "description": "On entering or reloading the Edit Book page at /books/:bookId/edit, obtain bookId from the route parameter using the page's book.id as the selected book identity and call getBook anonymously. On success, set book.id from response.book.id; prefill bookEdit.name from response.book.title, bookEdit.description from response.book.description using an empty string when it is null, and bookEdit.tags as a comma-and-space separated string from response.book.tags so previously saved metadata is retained after reload and reopening Edit. On 404 book_not_found, leave the edit fields empty or unavailable and do not fabricate saved values."
+        }
+      ]
+    },
+    "TR-book-edit-save": {
+      "source": "UI-book-edit-save",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.id",
+        "bookEdit.name",
+        "bookEdit.description",
+        "bookEdit.tags"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-update-book",
+          "description": "On Save Book in the Edit Book form, call updateBook anonymously with bookId obtained from the route parameter /books/:bookId/edit and identified on the page as book.id. Submit title from bookEdit.name, description from bookEdit.description, and tags converted from the comma-separated bookEdit.tags string by splitting on commas, trimming whitespace, and dropping empty entries. This updates the same opened book rather than creating a new one. On 200, retain response.book.id for navigation and do not use the form draft as the persisted detail source. On 400 invalid_title or 409 book_title_exists, stay on the Edit Book form, surface the validation or duplicate error, and do not navigate or create/update a different book. On 404 book_not_found, stay on the form or show the missing-book error without fabricating saved metadata."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "After a successful updateBook response, navigate to the Book page at /books/{bookId} using bookId from response.book.id. The destination page root UI-book-page then runs its existing mount trigger TR-book-load-detail to reload the persisted book name and description, so the updated heading and description are shown from persisted data and remain correct after reload."
+        }
+      ]
+    },
+    "TR-book-edit-cancel": {
+      "source": "UI-book-edit-cancel",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [
+        "bookEdit.name",
+        "bookEdit.description",
+        "bookEdit.tags"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Cancel returns to the unchanged Book detail without calling updateBook or any write API. Discard the pending bookEdit.name, bookEdit.description, and bookEdit.tags values so the proposed replacement metadata cannot be submitted later; navigate to the Book page at /books/{bookId} using bookId from book.id or the route parameter. The destination page root UI-book-page then runs its existing mount trigger TR-book-load-detail to reload the persisted unchanged name and description, so the original heading and description return and no heading shows the proposed replacement name."
+        }
+      ]
+    },
+    "TR-book-delete-open": {
+      "source": "UI-book-action-delete",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-delete-page",
+          "description": "Identify the selected book from the current book.id, which is the book whose Delete button was clicked. Navigate to the Delete Book page at /books/{book.id}/delete, passing that id as the bookId route parameter. Do not change book.id, book.name, or book.description."
+        }
+      ]
+    },
+    "TR-book-delete-load": {
+      "source": "UI-book-delete-page",
+      "event": "mount",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [
+        "book.id",
+        "book.name"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-book",
+          "description": "On entering or reloading the Delete Book page at /books/:bookId/delete, obtain bookId from the route parameter and assign it to the page's book.id; call getBook with that bookId. On success, set book.id from response.book.id and set book.name from response.book.title so UI-book-delete-description shows the saved book name in the confirmation message. Ignore response pages/tags for this confirmation view. On a 404 book_not_found rejection, leave book.name empty or unavailable and do not fabricate a name; keep the page usable."
+        }
+      ]
+    },
+    "TR-book-delete-confirm": {
+      "source": "UI-book-delete-confirm",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-delete-book",
+          "description": "Use the stable selected book identity from book.id as bookId and call deleteBook. On success with deleted=true, continue to the navigation action so the book is absent from the Books list after that page reloads. On a 404 book_not_found rejection, leave the current Delete Book page in place and do not navigate or report a successful deletion."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-books-page",
+          "description": "After successful deletion only, navigate to the Books page at /books. The Books page mount/reload behavior calls listBooks and updates books.items, so the removed book has no entry in UI-book-list and remains absent on later reloads or reopenings."
+        }
+      ]
+    },
+    "TR-book-delete-cancel": {
+      "source": "UI-book-delete-cancel",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.id"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Use the selected book identity from book.id as bookId and navigate back to the Book page at /books/{book.id}. Do not call deleteBook. The Book page mount/reload behavior reloads the persisted book via getBook, so UI-book-heading and UI-book-description show the original saved heading and description unchanged."
+        }
+      ]
+    },
+    "TR-page-form-load": {
+      "source": "UI-page-form-page",
+      "event": "mount",
+      "guard": null,
+      "read": [],
+      "write": [
+        "book.id"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-page-form-page",
+          "description": "On entering or reloading /books/:bookId/pages/create, obtain bookId from the route parameter and set book.id to that value so Save Page submits to the correct parent book. Do not create or load Page list entries here and do not prefill pageDraft.title or pageDraft.content; the title and content textboxes remain empty until the visitor types into them."
+        }
+      ]
+    },
+    "TR-page-form-save": {
+      "source": "UI-page-form-save",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.id",
+        "pageDraft.title",
+        "pageDraft.content"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-create-page",
+          "description": "On Save Page, take bookId from book.id, which is the parent book identity retained from the route, and submit pageDraft.title as the Page title and pageDraft.content as the page body to POST /api/books/{bookId}/pages. On 201, the page is persisted with its generated id, title, content, parent book_id, and created_at; do not treat the returned page as the Page list source, because the parent book must be reloaded to show persisted entries. On 400 invalid_title, 409 page_title_exists, or 404 book_not_found, keep the visitor on the New Page form, show the rejection feedback there, and do not navigate or fabricate a Page list entry. Anonymous visitors are allowed."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Only after the create request succeeds, navigate to the parent Book page at /books/{book.id}, passing the retained book.id as the bookId route parameter. The existing Book page mount trigger then reloads the persisted book and its Page list so exactly one visible Page list entry for the saved page appears; this works without login and persists across reload."
+        }
+      ]
+    },
+    "TR-page-view-load": {
+      "source": "UI-page-view-page",
+      "event": "mount",
+      "guard": null,
+      "read": [
+        "book.id",
+        "page.id"
+      ],
+      "write": [
+        "book.id",
+        "page.id",
+        "page.title",
+        "page.content"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-page",
+          "description": "When the Page reading view is entered or reloaded at /books/:bookId/pages/:pageId, obtain bookId and pageId from the route parameters and use the page's book.id and page.id as the selected parent-book and page identities; call getPage with those identifiers. On success, set page.id from response.page.id, set book.id from response.page.book_id to retain the saved parent association, set page.title from response.page.title for the level-1 page heading, and set page.content from response.page.content for the saved body text, using an empty string when content is null so the body renders blank without inventing text. On a 404 book_not_found rejection, leave the heading and body empty/unavailable and do not fabricate a saved page. On a 404 page_not_found rejection, leave the heading and body empty/unavailable and do not fabricate a saved page."
+        }
+      ]
+    },
+    "TR-page-edit-load": {
+      "source": "UI-page-edit-page",
+      "event": "mount",
+      "guard": null,
+      "read": [
+        "book.id",
+        "page.id"
+      ],
+      "write": [
+        "book.id",
+        "page.id",
+        "pageDraft.title",
+        "pageDraft.content"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-page",
+          "description": "When the Edit Page view is entered or reloaded at /books/:bookId/pages/:pageId/edit, obtain bookId and pageId from the route parameters and use the page's book.id and page.id as the selected parent-book and page identities; call getPage with those identifiers. On success, set page.id from response.page.id, set book.id from response.page.book_id, prefill pageDraft.title from response.page.title so the Page title field contains the saved title, and prefill pageDraft.content from response.page.content so the Write your page content here... textarea contains the saved body, using an empty string when content is null; Save Page remains visible without this load making any save request. On a 404 book_not_found rejection, leave the editor fields empty/unavailable and do not fabricate a saved title or body. On a 404 page_not_found rejection, leave the editor fields empty/unavailable and do not fabricate a saved title or body."
+        }
+      ]
+    }
+  },
+  "requirements": {
+    "ROOT": [],
+    "REQ-1": [],
+    "REQ-1.1": [
+      "TR-home-load-books"
+    ],
+    "REQ-2": [],
+    "REQ-2.1": [
+      "TR-books-load-books"
+    ],
+    "REQ-2.2": [
+      "TR-books-load-books",
+      "TR-book-open-detail",
+      "TR-book-load-detail"
+    ],
+    "REQ-2.3": [
+      "TR-books-load-books",
+      "TR-book-form-save",
+      "TR-book-load-detail",
+      "TR-book-edit-load",
+      "TR-book-form-cancel"
+    ],
+    "REQ-2.4": [
+      "TR-book-edit-load",
+      "TR-book-edit-save",
+      "TR-book-edit-cancel",
+      "TR-book-load-detail"
+    ],
+    "REQ-2.5": [
+      "TR-book-delete-open",
+      "TR-book-delete-load",
+      "TR-book-delete-confirm",
+      "TR-book-delete-cancel",
+      "TR-books-load-books",
+      "TR-book-load-detail"
+    ],
+    "REQ-3": [],
+    "REQ-3.1": [
+      "TR-page-form-load",
+      "TR-page-form-save",
+      "TR-book-load-detail"
+    ],
+    "REQ-3.2": [
+      "TR-page-view-load",
+      "TR-page-edit-load"
+    ]
+  },
+  "steps": {
+    "STEP-REQ-1.1-01-01": [
+      "TR-home-load-books"
+    ],
+    "STEP-REQ-2.1-01-01": [
+      "TR-books-load-books"
+    ],
+    "STEP-REQ-2.2-01-01": [
+      "TR-books-load-books",
+      "TR-book-open-detail",
+      "TR-book-load-detail"
+    ],
+    "STEP-REQ-2.3-01-01": [
+      "TR-books-load-books",
+      "TR-book-form-save",
+      "TR-book-load-detail",
+      "TR-book-edit-load"
+    ],
+    "STEP-REQ-2.3-02-01": [
+      "TR-books-load-books",
+      "TR-book-form-cancel"
+    ],
+    "STEP-REQ-2.4-01-01": [
+      "TR-book-edit-load",
+      "TR-book-edit-save",
+      "TR-book-load-detail"
+    ],
+    "STEP-REQ-2.4-02-01": [
+      "TR-book-edit-load",
+      "TR-book-edit-cancel",
+      "TR-book-load-detail"
+    ],
+    "STEP-REQ-2.5-01-01": [
+      "TR-book-delete-open",
+      "TR-book-delete-load",
+      "TR-book-delete-confirm",
+      "TR-books-load-books"
+    ],
+    "STEP-REQ-2.5-02-01": [
+      "TR-book-delete-open",
+      "TR-book-delete-load",
+      "TR-book-delete-cancel",
+      "TR-book-load-detail"
+    ],
+    "STEP-REQ-3.1-01-01": [
+      "TR-page-form-load",
+      "TR-page-form-save",
+      "TR-book-load-detail"
+    ],
+    "STEP-REQ-3.2-01-01": [
+      "TR-page-view-load"
+    ],
+    "STEP-REQ-3.2-02-01": [
+      "TR-page-view-load",
+      "TR-page-edit-load"
+    ]
+  }
+}

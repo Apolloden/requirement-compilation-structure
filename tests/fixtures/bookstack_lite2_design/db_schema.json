@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "Book": {
+      "description": "A book created through the UI in the public book workspace; persists across navigation and reload without authentication. Each book entry is uniquely identified by its business name (title).",
+      "fields": {
+        "id": {
+          "description": "Unique identifier of the book.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": true,
+          "unique": true,
+          "references": null,
+          "constraints": []
+        },
+        "title": {
+          "description": "Display title of the book; acts as the business name that uniquely identifies a book entry and is shown as the heading on the book detail page.",
+          "type": "string",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "references": null,
+          "constraints": [
+            "must not be empty"
+          ]
+        },
+        "created_at": {
+          "description": "Timestamp when the book was created.",
+          "type": "datetime",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "description": {
+          "description": "Saved description of the book, displayed on the book detail page.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "tags": {
+          "description": "Tags associated with the book, entered as a comma-separated text field on the Create New Book form and persisted as a list of tag strings across reload; empty when omitted.",
+          "type": "json",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": [
+            "stored as an array of tag strings"
+          ]
+        }
+      }
+    },
+    "Page": {
+      "description": "A page published inside a book through the public UI without login; persists across navigation and reload. Each page entry is uniquely identified by its title and retains its association with the parent book.",
+      "fields": {
+        "id": {
+          "description": "Unique identifier of the page.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": true,
+          "unique": true,
+          "references": null,
+          "constraints": []
+        },
+        "title": {
+          "description": "Page title entered in the Page title textbox; uniquely identifies a page entry and is shown as the Page list entry.",
+          "type": "string",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "references": null,
+          "constraints": [
+            "must not be empty"
+          ]
+        },
+        "content": {
+          "description": "Page body entered in the Write your page content here... textbox and persisted when Save Page is used.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "book_id": {
+          "description": "Identifier of the parent book that owns the page.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": "Book.id",
+          "constraints": []
+        },
+        "created_at": {
+          "description": "Timestamp when the page was saved.",
+          "type": "datetime",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        }
+      }
+    }
+  },
+  "requirements": {
+    "REQ-1.1": [
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-2.1": [
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-2.2": [
+      "Book.created_at",
+      "Book.description",
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-2.3": [
+      "Book.created_at",
+      "Book.description",
+      "Book.id",
+      "Book.tags",
+      "Book.title"
+    ],
+    "REQ-2.4": [
+      "Book.description",
+      "Book.id",
+      "Book.tags",
+      "Book.title"
+    ],
+    "REQ-2.5": [
+      "Book.description",
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-3.1": [
+      "Book.id",
+      "Book.title",
+      "Page.book_id",
+      "Page.content",
+      "Page.created_at",
+      "Page.id",
+      "Page.title"
+    ],
+    "REQ-3.2": [
+      "Book.id",
+      "Book.title",
+      "Page.book_id",
+      "Page.content",
+      "Page.id",
+      "Page.title"
+    ]
+  }
+}

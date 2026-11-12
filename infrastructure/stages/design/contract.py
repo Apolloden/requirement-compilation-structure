@@ -19,6 +19,7 @@ from infrastructure.stages.database.obligations.records import (check_symbols, n
     normalize_obligations)
 from infrastructure.stages.backend.primitives import validate_design
 from infrastructure.stages.frontend.triggers.design import validate_coverage
+from infrastructure.stages.design.names import named_elements, page_subtree
 
 FIELD_TYPES = {"string", "integer", "number", "boolean", "date", "datetime", "uuid", "json"}
 DTYPES = {"string", "integer", "number", "boolean", "array", "object", "null"}
@@ -201,8 +202,13 @@ def check_ui(ui, tree, images, problems, skipped=frozenset()):
     for rid in tree.leaves:
         if rid not in skipped and not ui["requirements"].get(rid):
             problems.append(f"ui_design.requirements[{rid}]: no UI elements (stage 10 would skip it)")
+
+
+def check_duplicate_controls(ui, problems):
+    """Without a naming table: two links or buttons with the same name on one page."""
     # Browser tests look controls up strictly: two links or buttons with the same name on one
     # page fail every test that clicks them.
+    pages, elements = ui.get("pages", {}), ui.get("elements", {})
     for pid, page in pages.items():
         named = {}
         for uid, node in elements.items():
@@ -219,6 +225,35 @@ def check_ui(ui, tree, images, problems, skipped=frozenset()):
             if len(uids) > 1:
                 problems.append(f"ui_design.pages.{pid}: {len(uids)} {kind}s named {label!r} ({', '.join(uids)}); "
                     "strict browser tests need one")
+
+
+def check_naming(ui, plan, problems, skipped=frozenset()):
+    """With a naming table: every listed control exists exactly once, with exactly its name, on
+    each page that lists it; every fixed-name link or button is listed; header pages hold the header."""
+    if not all(isinstance(ui.get(key), dict) for key in ("pages", "elements")):
+        return
+    plan_pages = plan.get("pages") or {}
+    naming = [entry for entry in plan.get("naming") or [] if isinstance(entry, dict)]
+    for pid in ui["pages"]:
+        page_plan = plan_pages.get(pid) or {}
+        found = named_elements(ui, pid, plan)
+        listed = [entry for entry in naming if pid in (entry.get("pages") or [])]
+        exempt = any(rid in skipped for rid in page_plan.get("requirements") or [])
+        for entry in listed:
+            role, name = entry.get("role"), entry.get("name")
+            uids = [uid for uid, found_role, found_name in found if (found_role, found_name) == (role, name)]
+            if not uids and not exempt:
+                problems.append(f"ui_design.pages.{pid}: no {role} named {name!r} (naming table)")
+            elif len(uids) > 1:
+                problems.append(f"ui_design.pages.{pid}: {len(uids)} {role}s named {name!r} ({', '.join(uids)}); "
+                    "strict browser tests need one")
+        known = {(entry.get("role"), entry.get("name")) for entry in listed}
+        for uid, role, name in found:
+            if role in ("link", "button") and (role, name) not in known:
+                problems.append(f"ui_design.pages.{pid}: {role} {name!r} ({uid}) is not in the naming table")
+        if page_plan.get("layout") and not any((ui["elements"][uid].get("prop") or {}).get("layout") is True
+                for uid in page_subtree(ui, pid)):
+            problems.append(f"ui_design.pages.{pid}: page shows the header but has no header elements")
 
 
 def check_triggers(design, ui, backend, obligations, tree, problems):
@@ -266,6 +301,10 @@ def check_artifacts(requirements: dict, schema: dict, obligations: dict, backend
     normalized = check_obligations(obligations, schema, tree, problems)
     check_backend(backend, schema, normalized, tree, problems)
     check_ui(ui, tree, image_ids(requirements), problems, skipped)
+    if plan is None:
+        check_duplicate_controls(ui, problems)
+    else:
+        check_naming(ui, plan, problems, skipped)
     check_triggers(triggers, ui, backend, normalized, tree, problems)
     return problems
 
