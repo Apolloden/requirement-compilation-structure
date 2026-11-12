@@ -1,3 +1,4 @@
+import contextlib
 import json
 import re
 import shutil
@@ -66,6 +67,16 @@ class WorkspaceTests(unittest.TestCase):
         ws = self.make(self.tmp / "out dir with spaces")
         ws.write({"backend/app.js": "x\n"})
         self.assertEqual(ws.read_generated()["backend/app.js"], "x\n")
+
+    def test_relative_output_path_becomes_absolute(self):
+        # P1 used "-o outputs/lite-1": subprocesses run in other folders, so every path must be absolute.
+        with contextlib.chdir(self.tmp):
+            ws = Workspace(Path("rel out"))
+            ws.init(self.req, [])
+        self.assertTrue(ws.out.is_absolute()); self.assertEqual(ws.out, (self.tmp / "rel out").resolve())
+        for path in (ws.arc, ws.harness, ws.check_dir, ws.calls_dir, ws.versions):
+            self.assertTrue(path.is_absolute(), path)
+        self.assertTrue((self.tmp / "rel out" / ".arc/harness/tests/helpers.ts").exists())
 
     def test_tests_are_written_into_the_harness(self):
         ws = self.make()

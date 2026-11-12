@@ -31,7 +31,7 @@ def _remove(path: Path) -> None:
 
 class Workspace:
     def __init__(self, out: Path) -> None:
-        self.out = Path(out)
+        self.out = Path(out).resolve()   # absolute: subprocesses run in other folders
         self.arc = self.out / ".arc"
         self.harness = self.arc / "harness"
         self.versions = self.arc / "versions"

@@ -32,12 +32,12 @@ class TestResult:
 
 
 def _cli(harness: Path) -> list[str]:
-    return ["node", str(harness / "node_modules" / "@playwright" / "test" / "cli.js")]
+    return ["node", str(Path(harness).resolve() / "node_modules" / "@playwright" / "test" / "cli.js")]
 
 
 def prepare_harness(out: Path) -> HarnessStatus:
     """npm install in .arc/harness, then install Chromium (a no-op when it is already in the cache)."""
-    harness = Path(out) / ".arc" / "harness"
+    harness = (Path(out) / ".arc" / "harness").resolve()
     try:
         install = proc.run([proc.npm(), "install", "--no-audit", "--no-fund"], harness, timeout=config.INSTALL_TIMEOUT_SECONDS)
     except FileNotFoundError as e:
@@ -110,7 +110,8 @@ def parse_report(data: dict) -> tuple[list[TestResult], list[str]]:
 
 
 def run_playwright(harness: Path, base_url: str, smoke_file: Path, *, timeout: float) -> tuple[list[TestResult], list[str], str]:
-    report = Path(harness) / "results.json"
+    harness, smoke_file = Path(harness).resolve(), Path(smoke_file).resolve()
+    report = harness / "results.json"
     report.unlink(missing_ok=True)
     env = proc.local_env({"ARCFLASH_BASE_URL": base_url, "ARCFLASH_SMOKE": str(smoke_file),
                           "ARCFLASH_WORKERS": str(config.CHECK_WORKERS)})

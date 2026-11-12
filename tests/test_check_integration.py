@@ -1,3 +1,4 @@
+import contextlib
 import shutil
 import socket
 import tempfile
@@ -73,6 +74,16 @@ class CheckIntegrationTests(unittest.TestCase):
         failed = [t for t in r.scenarios if t.status != "passed"]
         self.assertTrue(failed); self.assertIn('textbox "Content"', failed[0].aria)
         self.assertIn('textbox "Body" (page note_new) does not appear in the frontend code', r.static_issues)
+
+    def test_relative_output_path_checks_in_the_right_places(self):
+        # P1 used "-o outputs/lite-1": the harness ran no browser and the check database landed inside the app.
+        with contextlib.chdir(self.tmp):
+            relative = Path("check run")
+            self.assertTrue(prepare_harness(relative).ok)
+            r = run_check(Workspace(relative), golden_plan(), harness_ok=True)
+        self.assertEqual((r.scenario_passed, r.scenario_total, len(r.smoke)), (3, 3, 3), r.to_prompt())
+        self.assertFalse((self.ws.out / "check run").exists())
+        self.assertTrue((self.ws.out / ".arc/check/test.db").exists())
 
     def test_server_is_stopped_after_each_check(self):
         ports = []
