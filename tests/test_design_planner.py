@@ -116,3 +116,22 @@ class HeaderFormat(unittest.TestCase):                                        # 
         tree = lite_tree(); model = ReplayModel([good])
         planner.plan_ui(tree, lite_contexts(tree), lite_images(), answer("p1"), model, Mock())
         self.assertEqual(model.calls, 1)
+
+class OtherRoles(unittest.TestCase):                                          # found in the paid run on the sample input
+    def test_a_naming_entry_with_another_role_is_dropped_not_forced(self):
+        # The planner listed a radio group as a combobox; the sample's tests look it up as a radiogroup.
+        # A role the checks cannot express is dropped, so nothing pushes the design to a wrong role.
+        with_radio = answer("p2"); with_radio["naming"].append({"name": "Gender", "role": "radiogroup", "pages": ["book_form"]})
+        tree = lite_tree(); model = ReplayModel([with_radio])
+        plan = planner.plan_ui(tree, lite_contexts(tree), lite_images(), answer("p1"), model, Mock())
+        self.assertEqual(model.calls, 1)
+        self.assertFalse(any(entry["name"] == "Gender" for entry in plan["naming"]))
+
+    def test_a_naming_entry_without_a_role_is_still_rejected(self):
+        bad = answer("p2"); bad["naming"].append({"name": "Gender", "pages": ["book_form"]})
+        tree = lite_tree(); model = ReplayModel([bad, answer("p2")])
+        planner.plan_ui(tree, lite_contexts(tree), lite_images(), answer("p1"), model, Mock())
+        self.assertEqual(model.calls, 2)
+
+    def test_the_prompt_says_not_to_force_a_role(self):
+        self.assertIn("never give a control a different role to fit this list", planner.P2_INSTRUCTIONS)

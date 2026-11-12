@@ -144,6 +144,8 @@ naming lists every control the requirement text names:
 - A name appears at most once per role on a page. If a header control and a page control
   would share a role and name, keep the header control only.
 - Do not list names that are filled in at runtime, such as a record's own title.
+- List only controls that have one of these roles. A radio group, its radio options or an
+  alert is not listed; never give a control a different role to fit this list.
 
 Links, buttons and fields come from the requirement text. Reference images decide
 arrangement and style only: do not add a control because a screenshot shows one.
@@ -251,6 +253,10 @@ def plan_ui(tree, contexts: dict, images: dict, data_plan: dict, model, console)
             for aid, api in data_plan["apis"].items()}}
 
     def accept(answer):
+        if isinstance(answer, dict) and isinstance(answer.get("naming"), list):
+            # A role the checks cannot express (a radio group, say) is dropped, never forced into another role.
+            answer = {**answer, "naming": [entry for entry in answer["naming"] if not (isinstance(entry, dict)
+                and isinstance(entry.get("role"), str) and entry["role"] not in ROLES)]}
         check_ui_plan(answer, tree, images)
         return {"pages": answer["pages"], "layout": answer["layout"], "naming": answer["naming"]}
 
