@@ -94,10 +94,13 @@ def implement_ui(arc_dir: Path, design: dict, model, console, report: dict, max_
         file_roots=("frontend/src", "frontend/tests"))
     report["status"] = "IMPLEMENTING"
     save_json(arc_dir / "ui_checks.json", report)
+    # The plan stage writes ui_plan.json; with it the tests also check names strictly (classic path: none).
+    plan_path = arc_dir / "ui_plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8")) if plan_path.is_file() else None
     for number, pid in enumerate(design["pages"], 1):
         uses = owners(design, pid)
         relative = test_path(pid)
-        suite = existence_suite(design, pid)
+        suite = existence_suite(design, pid, plan)
         if not (output / relative).is_file():
             save_text(output / relative, suite)
         report["pages"][pid] = {"status": "TESTS_READY", "requirements": uses, "test_path": relative}

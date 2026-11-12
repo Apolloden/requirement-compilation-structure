@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from infrastructure.stages.frontend.ui.design import data_symbols, page_elements, visible
+from infrastructure.stages.design.names import named_elements
 from infrastructure.utils.processes import capture_process, npm_command
 
 KEY_TYPES = {"page", "form", "input", "checkbox", "select", "button", "heading", "link", "list", "image", "alert", "table", "text"}
@@ -34,9 +35,14 @@ def test_path(pid: str) -> str:
     return f"frontend/tests/ui/{pid}.spec.ts"
 
 
-def existence_suite(design: dict, pid: str) -> str:
-    """Supply test-local display data; check controls and actual application data keys."""
+def existence_suite(design: dict, pid: str, plan: dict | None = None) -> str:
+    """Supply test-local display data; check controls and actual application data keys.
+
+    With a UI plan, each display test also looks every visible named control up the way a
+    browser test written from the requirement would: by role and exact name, expecting
+    exactly one match. Without a plan the suite is unchanged."""
     page = design["pages"][pid]
+    named = named_elements(design, pid, plan) if plan is not None else []
     elements = page_elements(design, pid)
     variables = data_symbols(elements)
     empty_values = {"string": "", "integer": 0, "number": 0, "boolean": False,
@@ -89,6 +95,13 @@ def existence_suite(design: dict, pid: str) -> str:
             locator = f"page.getByTestId({json.dumps(uid)})"
             shown = visible(design, uid, state)
             lines.append(f"  await expect({locator}){'' if shown else '.not'}.toBeVisible();")
+        asserted = set()
+        for uid, role, name in named:
+            if (role, name) in asserted or not visible(design, uid, state):
+                continue
+            asserted.add((role, name))
+            lines.append(f"  await expect(page.getByRole({json.dumps(role)}, {{ name: {json.dumps(name, ensure_ascii=False)}, "
+                "exact: true })).toHaveCount(1);")
         lines.extend([
             '  await expect.poll(() => page.evaluate(({ pageId, keys }) => {',
             '    const state = (window as unknown as { __ARC_UI_DATA__?: { page: string; data: Record<string, unknown> } }).__ARC_UI_DATA__;',
