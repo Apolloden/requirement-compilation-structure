@@ -171,6 +171,24 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result["shipped"]["source"], "unchecked")
         self.assertEqual((self.out / "backend/app.js").read_text(), golden_files()["backend/app.js"])
 
+    def test_a_crash_after_a_version_still_ships_that_version(self):
+        def crash():
+            if len(t.calls) == 2:
+                raise RuntimeError("check crashed")
+        t = tools(reports=[report(passed=1), GREEN], on_check=crash)
+        result = self.run_quiet(NOTES, self.out, llm=golden_llm(attempts=2), tools=t)
+        self.assertIn("check crashed", " ".join(result["errors"]))
+        self.assertEqual(result["shipped"]["source"], "a1-r0")
+        self.assertEqual((self.out / MAIN).read_text(), golden_files()[MAIN])
+        self.assertFalse((self.out / ".arc/check").exists())
+
+    def test_a_crash_before_any_version_ships_the_template(self):
+        def crash():
+            raise RuntimeError("check crashed")
+        result = self.run_quiet(NOTES, self.out, llm=golden_llm(attempts=2), tools=tools(reports=[GREEN], on_check=crash))
+        self.assertEqual(result["shipped"]["source"], "template")
+        self.assertIn("<h1>Application</h1>", (self.out / MAIN).read_text())
+
     def test_foreign_output_folder_is_left_alone(self):
         self.out.mkdir(); (self.out / "keep.txt").write_text("x")
         result = self.run_quiet(NOTES, self.out, llm=golden_llm(), tools=tools())

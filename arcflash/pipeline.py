@@ -140,14 +140,14 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
             result["errors"].append(str(e))
             _say(f"no model: {e}")
             llm = None
+    state = {"versions": [], "unchecked": False}
     if spec is not None and llm is not None:
         try:
-            _flow(spec, req_dir, ws, llm, tools, clock, result)
+            _flow(spec, req_dir, ws, llm, tools, clock, result, state)
         except Exception as e:  # last resort: whatever happened, the best version or the template ships
             result["errors"].append(f"unexpected error: {e!r}")
             _say("unexpected error:\n" + traceback.format_exc())
-    else:
-        _ship_template(ws, result)
+    _ship(ws, state, result)
 
     if llm is not None:
         result["usage"], result["calls"] = llm.usage.totals(), llm.usage.records()
@@ -159,16 +159,29 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
     return result
 
 
-def _ship_template(ws: Workspace, result: dict) -> None:
+def _ship(ws: Workspace, state: dict, result: dict) -> None:
+    """7. The best version that started, else the best that built, else the template; then remove test data."""
+    if state["unchecked"]:
+        ws.ship()
+        result["shipped"] = _shipped("unchecked", None)
+        return
+    for condition in (lambda r: r.booted, lambda r: r.built):
+        candidates = [v for v in state["versions"] if condition(v[0])]
+        if candidates:
+            report, snapshot = max(candidates, key=lambda v: v[0].rank())
+            ws.restore(snapshot)
+            ws.ship()
+            result["shipped"] = _shipped(snapshot.name, report)
+            return
     ws.reset_to_template()
     ws.ship()
     result["shipped"] = _shipped("template", None)
 
 
-def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: dict) -> None:
+def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: dict, state: dict) -> None:
+    """Steps 2 to 6; every checked version is added to state["versions"] as soon as it exists."""
     budget = Budget(llm.usage, len(spec.scenarios), clock=clock)
-    versions: list[tuple[CheckReport, Path]] = []
-    unchecked = False
+    versions: list[tuple[CheckReport, Path]] = state["versions"]
     with ThreadPoolExecutor(max_workers=3) as pool:
         # 2-3. background installs and the independent tests; screenshot notes in this thread
         install_future = pool.submit(tools.install_app, ws)
@@ -213,7 +226,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             if install.returncode != 0:
                 result["errors"].append("npm install failed; the app ships unchecked:\n" + install.output[-2000:])
                 _say("npm install failed; shipping the generated app unchecked")
-                unchecked = True
+                state["unchecked"] = True
                 break
             result["harness_ok"] = harness_ok = harness.ok
             if not harness_ok:
@@ -225,18 +238,3 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             attempt["rounds"] = _rounds(ws, f"a{n}")
             versions.append((best, snapshot))
             _say(f"attempt {n}: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")
-
-    # 7. ship
-    if unchecked:
-        ws.ship()
-        result["shipped"] = _shipped("unchecked", None)
-        return
-    for condition in (lambda r: r.booted, lambda r: r.built):
-        candidates = [v for v in versions if condition(v[0])]
-        if candidates:
-            report, snapshot = max(candidates, key=lambda v: v[0].rank())
-            ws.restore(snapshot)
-            ws.ship()
-            result["shipped"] = _shipped(snapshot.name, report)
-            return
-    _ship_template(ws, result)
