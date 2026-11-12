@@ -13,7 +13,8 @@ from PIL import Image, ImageOps
 from infrastructure.utils.presentation.model_io import http_client, invoke
 from infrastructure.utils.presentation.console import DemoConsole
 from infrastructure.shared.agent.proposals import propose_json
-from infrastructure.shared.models.text import DEFAULT_MODEL, JSON_OUTPUT_RULE, reasoning_arguments, reasoning_rejected
+from infrastructure.shared.models.text import (DEFAULT_MODEL, JSON_OUTPUT_RULE, reasoning_arguments,
+    reasoning_rejected, retry_platform_errors)
 
 
 VISION_INSTRUCTIONS = """Describe the supplied UI reference using visible evidence only.
@@ -61,7 +62,8 @@ class VisualModel:
         if self.reasoning not in {"auto", "provider", "none", "low", "high", "max"}:
             raise ValueError("VISUAL_REASONING must be auto, provider, none, low, high or max")
         self._reasoning_supported = True
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=600, max_retries=2, http_client=http_client())
+        # max_retries=0: retry_platform_errors is the one retry policy for platform errors.
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=600, max_retries=0, http_client=http_client())
 
     def analyze(self, image: Path, max_attempts: int = 10) -> dict:
         """Send one supported reference image and parse the returned layout, elements, and style evidence."""
@@ -94,7 +96,7 @@ class VisualModel:
             while True:
                 controls = reasoning_arguments(self.name, mode) if getattr(self, "_reasoning_supported", True) else {}
                 try:
-                    response = invoke(self.client, {**arguments, **controls})
+                    response = retry_platform_errors(lambda: invoke(self.client, {**arguments, **controls}))
                     break
                 except OpenAIError as error:
                     if not getattr(self, "_reasoning_supported", True) or not reasoning_rejected(error):
