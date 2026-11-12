@@ -46,6 +46,26 @@ D_INSTRUCTIONS = (GROUP_HEADER + "\n\nRULES FOR READ AND WRITE RECORDS\n" + OBLI
 EMPTY = {"read": [], "write": []}
 
 
+class CoverageGaps(ValueError):
+    """Every coverage gap of one call, so a single repair request can name them all."""
+    def __init__(self, errors):
+        self.feedback = [getattr(error, "feedback", str(error)) for error in errors]
+        super().__init__("Coverage failed for " + str(len(errors)) + " requirement(s) or step(s):\n- "
+            + "\n- ".join(str(error) for error in errors))
+
+
+def check_each(check, ids) -> None:
+    """Run a check that stops at the first failure once per ID, and report every failure together."""
+    errors = []
+    for identity in ids:
+        try:
+            check(identity)
+        except ValueError as error:     # ObligationCoverageError is a ValueError
+            errors.append(error)
+    if errors:
+        raise CoverageGaps(errors)
+
+
 def new_state(data_plan: dict, tree) -> dict:
     """The plan state after P1: tables and planned APIs, nothing filled in per requirement yet."""
     folders = [rid for rid in tree.requirements if tree.children[rid]]
@@ -140,7 +160,8 @@ def data_worker(state: dict, leaves: list[str], tree, model, console) -> dict:
         owners = {rid: state["backend"]["requirements"][rid] for rid in state["done"]["data"]}
         owners.update({leaf: answer["requirement_apis"][leaf] for leaf in leaves})
         # Every requirement accepted so far stays covered, also when this group changed a shared API.
-        validate_design({"apis": merged, "requirements": owners}, obligations, complete=False, tree=tree)
+        check_each(lambda rid: validate_design({"apis": merged, "requirements": {rid: owners[rid]}}, obligations,
+            complete=False, tree=tree), owners)
         conventions = state["conventions"]
         for leaf in leaves:   # merged here so a malformed "conventions" answer is sent back for repair
             record = obligations["requirements"][leaf]
@@ -375,7 +396,7 @@ def trigger_worker(state: dict, leaves: list[str], tree, contexts: dict, model, 
                     problems.append(f"{where}: action kind must be api or ui")
         reject(problems)
         covered = [leaf for leaf in [*state["done"]["triggers"], *leaves] if ui["requirements"].get(leaf)]
-        validate_coverage(merged, backend, obligations, tree, covered)
+        check_each(lambda rid: validate_coverage(merged, backend, obligations, tree, [rid]), covered)
         return merged
 
     merged, _ = propose_json(model, T_INSTRUCTIONS, request, accept, console, "Plan T " + ", ".join(leaves), PLAN_ATTEMPTS)

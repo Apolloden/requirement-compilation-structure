@@ -207,3 +207,27 @@ class TextboxInputs(unittest.TestCase):                                       # 
     def test_the_ui_prompt_says_which_inputs_are_text_boxes(self):
         # Date fields came out as date inputs (no textbox role) in both sample runs and needed a repair round.
         self.assertIn("A listed textbox is an input with input_type text, textarea, email, tel or url", workers.U_INSTRUCTIONS)
+
+class AllCoverageGaps(unittest.TestCase):                                     # found in the final paid lite run
+    # The upstream coverage checks stop at the first failing requirement, so a group learned about
+    # one gap per attempt. Every gap of the group is now reported in one repair request.
+    def test_trigger_worker_reports_every_coverage_gap_at_once(self):
+        from design_fixtures import lite_contexts
+        tree = lite_tree(); state = ui_state()
+        state = workers.trigger_worker(state, GROUPS["REQ-1"], tree, lite_contexts(tree), ReplayModel([answer("t_REQ-1")]), Mock())
+        bad = answer("t_REQ-2")
+        for leaf in ("REQ-2.3", "REQ-2.5"):
+            bad["requirement_triggers"][leaf] = []
+            for sid in tree.own_steps[leaf]: bad["step_triggers"][sid] = []
+        model = ReplayModel([bad, answer("t_REQ-2")])
+        workers.trigger_worker(state, GROUPS["REQ-2"], tree, lite_contexts(tree), model, Mock())
+        error = model.requests[1][1]["correction"]["error"]
+        self.assertIn("REQ-2.3", error); self.assertIn("REQ-2.5", error)
+
+    def test_data_worker_reports_every_coverage_gap_at_once(self):
+        tree = lite_tree(); state = data_state(("REQ-1",))
+        bad = answer("d_REQ-2"); bad["requirement_apis"]["REQ-2.3"] = []; bad["requirement_apis"]["REQ-2.5"] = []
+        model = ReplayModel([bad, answer("d_REQ-2")])
+        workers.data_worker(state, GROUPS["REQ-2"], tree, model, Mock())
+        error = model.requests[1][1]["correction"]["error"]
+        self.assertIn("REQ-2.3", error); self.assertIn("REQ-2.5", error)
