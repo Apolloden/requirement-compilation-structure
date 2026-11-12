@@ -1,0 +1,219 @@
+{
+  "requirements": {
+    "ROOT": {
+      "read": [],
+      "write": []
+    },
+    "REQ-1": {
+      "read": [],
+      "write": []
+    },
+    "REQ-1.1": {
+      "read": [],
+      "write": []
+    },
+    "REQ-2": {
+      "read": [],
+      "write": []
+    },
+    "REQ-2.1": {
+      "read": [
+        "Book.id",
+        "Book.title"
+      ],
+      "write": []
+    },
+    "REQ-2.2": {
+      "read": [
+        "Book.description",
+        "Book.title"
+      ],
+      "write": []
+    },
+    "REQ-2.3": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ],
+      "write": [
+        "Book.created_at",
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ]
+    },
+    "REQ-2.4": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ],
+      "write": [
+        "Book.description",
+        "Book.tags",
+        "Book.title"
+      ]
+    },
+    "REQ-2.5": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.title"
+      ],
+      "write": [
+        "Book.id"
+      ]
+    },
+    "REQ-3": {
+      "read": [],
+      "write": []
+    },
+    "REQ-3.1": {
+      "read": [
+        "Book.id",
+        "Book.title",
+        "Page.book_id",
+        "Page.id",
+        "Page.title"
+      ],
+      "write": [
+        "Page.body",
+        "Page.book_id",
+        "Page.created_at",
+        "Page.id",
+        "Page.title"
+      ]
+    },
+    "REQ-3.2": {
+      "read": [
+        "Page.body",
+        "Page.book_id",
+        "Page.id",
+        "Page.published",
+        "Page.title"
+      ],
+      "write": []
+    }
+  },
+  "steps": {
+    "STEP-REQ-1.1-01-01": {
+      "read": [],
+      "write": []
+    },
+    "STEP-REQ-2.1-01-01": {
+      "read": [
+        "Book.id",
+        "Book.title"
+      ],
+      "write": []
+    },
+    "STEP-REQ-2.2-01-01": {
+      "read": [
+        "Book.description",
+        "Book.title"
+      ],
+      "write": []
+    },
+    "STEP-REQ-2.3-01-01": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ],
+      "write": [
+        "Book.created_at",
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ]
+    },
+    "STEP-REQ-2.3-02-01": {
+      "read": [
+        "Book.title"
+      ],
+      "write": []
+    },
+    "STEP-REQ-2.4-01-01": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ],
+      "write": [
+        "Book.description",
+        "Book.tags",
+        "Book.title"
+      ]
+    },
+    "STEP-REQ-2.4-02-01": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.tags",
+        "Book.title"
+      ],
+      "write": []
+    },
+    "STEP-REQ-2.5-01-01": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.title"
+      ],
+      "write": [
+        "Book.id"
+      ]
+    },
+    "STEP-REQ-2.5-02-01": {
+      "read": [
+        "Book.description",
+        "Book.id",
+        "Book.title"
+      ],
+      "write": []
+    },
+    "STEP-REQ-3.1-01-01": {
+      "read": [
+        "Book.id",
+        "Book.title",
+        "Page.book_id",
+        "Page.id",
+        "Page.title"
+      ],
+      "write": [
+        "Page.body",
+        "Page.book_id",
+        "Page.created_at",
+        "Page.id",
+        "Page.title"
+      ]
+    },
+    "STEP-REQ-3.2-01-01": {
+      "read": [
+        "Page.body",
+        "Page.book_id",
+        "Page.id",
+        "Page.published",
+        "Page.title"
+      ],
+      "write": []
+    },
+    "STEP-REQ-3.2-02-01": {
+      "read": [
+        "Page.body",
+        "Page.book_id",
+        "Page.id",
+        "Page.published",
+        "Page.title"
+      ],
+      "write": []
+    }
+  }
+}

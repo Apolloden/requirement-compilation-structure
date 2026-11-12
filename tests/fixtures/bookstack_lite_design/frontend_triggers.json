@@ -1,0 +1,439 @@
+{
+  "triggers": {
+    "TR-REQ-2.1-NAV-BOOKS": {
+      "source": "UI-nav-books",
+      "event": "click",
+      "guard": null,
+      "read": [],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-books-page",
+          "description": "Navigate from the Home page Books link to the Books page at route /books. The destination requires no entity identity or query parameters; render the Books page root UI-books-page, which includes the Book list region."
+        }
+      ]
+    },
+    "TR-REQ-2.1-LOAD-BOOKS": {
+      "source": "UI-books-page",
+      "event": "mount",
+      "guard": null,
+      "read": [],
+      "write": [
+        "books.items"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-list-books",
+          "description": "On Books page entry or reload, call GET /api/books with no request parameters to retrieve the persisted book collection for the anonymous visitor. On 200 success, replace books.items with response.books, preserving each returned book's id and title and rendering each book exactly once in UI-books-list with its business title as the keyboard-accessible entry name. On rejection, do not fabricate book entries; leave the list empty or in its load-failure state and surface the failure through the page."
+        }
+      ]
+    },
+    "TR-REQ-2.2-OPEN-BOOK": {
+      "source": "UI-books-list",
+      "event": "click",
+      "guard": "The activated entry is one of the rendered book entries in books.items and has an id.",
+      "read": [
+        "books.items"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Activate the exact book entry selected by the user from UI-books-list, whether rendered as a button or link. Identify the selected row/object in books.items and obtain its id; do not use its display name as identity. Navigate to the Book detail route /books/:id using that selected entry id as the route parameter. Implementation chooses the router or native link navigation mechanism; UI-book-page is the destination page root reference."
+        }
+      ]
+    },
+    "TR-REQ-2.2-LOAD-BOOK": {
+      "source": "UI-book-page",
+      "event": "mount",
+      "guard": "A non-empty Book route :id parameter is present.",
+      "read": [],
+      "write": [
+        "book.name",
+        "book.description",
+        "book.pages"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-book",
+          "description": "On Book page entry, reload, or reopening of /books/:id, call GET /api/books/{id} with id taken from the Book route parameter. On 200 success, set book.name from response.title so UI-book-heading shows the saved business name, and set book.description from response.description so UI-book-description shows the saved description; if response.description is null, represent that as no saved description rather than fabricating text. On 404 rejection, do not fabricate a book heading or description; surface the not-found/load-failure state on the Book page and skip the page-list load because the parent book is absent."
+        },
+        {
+          "kind": "api",
+          "api": "API-get-book-pages",
+          "description": "After the book details load succeeds, and on every Book page entry, reload, or reopening of /books/:id (including the return after Save Page), call GET /api/books/{bookId}/pages with bookId taken from the same Book route :id parameter. On 200 success, set book.name from response.title and set book.pages from response.pages so UI-book-page-list shows every persisted page in the parent book exactly once as an id/title entry whose visible identity is its title. On 404 rejection, surface the not-found state and do not fabricate page entries."
+        }
+      ]
+    },
+    "TR-REQ-2.3-CREATE-SAVE": {
+      "source": "UI-book-form",
+      "event": "submit",
+      "guard": "draftBook.name is non-empty and the form is not already submitting a creation request.",
+      "read": [
+        "draftBook.name",
+        "draftBook.description",
+        "draftBook.tags"
+      ],
+      "write": [
+        "book.name",
+        "book.description",
+        "book.tags"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-form-name",
+          "description": "Validate the submitted draftBook.name by trimming it and requiring a non-empty value. If it is empty, keep the Create New Book form open, show a required-name validation message associated with UI-book-form-name, and stop without executing later actions or calling API-create-book."
+        },
+        {
+          "kind": "api",
+          "api": "API-create-book",
+          "description": "When validation passes, call POST /api/books with body title set to trimmed draftBook.name, description set to draftBook.description or null when empty as allowed by the API, and tags parsed from draftBook.tags by splitting on commas, trimming each label, dropping empty labels, and sending null when no labels remain. On 201 success, use response.id as the new book identity, set book.name from response.title, book.description from response.description, and book.tags to a comma-separated string from response.tags or an empty string when null; then navigate to the Book detail route /books/:id using response.id, with UI-book-page as the destination root reference. Do not rely on these in-memory values for later reloads; the Book page mount trigger re-fetches persisted data. On 409 duplicate-title rejection, remain on the form, show the returned error message, and do not navigate or create another book. On other rejection, remain on the form and surface the failure."
+        }
+      ]
+    },
+    "TR-REQ-2.3-LOAD-EDIT": {
+      "source": "UI-book-edit-page",
+      "event": "mount",
+      "guard": "A non-empty Book route :id parameter is present.",
+      "read": [],
+      "write": [
+        "book.name",
+        "book.description",
+        "book.tags",
+        "draftBook.name",
+        "draftBook.description",
+        "draftBook.tags"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-book",
+          "description": "On Edit Book page entry or reopen of /books/:id/edit, call GET /api/books/{id} with id taken from the Book route parameter. On 200 success, set book.name from response.title and draftBook.name to the same saved name; set book.description from response.description or an empty string when null, and draftBook.description to the same; set book.tags to a comma-separated string formed by joining response.tags with ', ' or an empty string when null, and draftBook.tags to the same. This prefills UI-book-edit-name, UI-book-edit-description and UI-book-edit-tags from persisted data after reload. On 404 rejection, do not fabricate book fields; surface the not-found/load-failure state on the Edit Book page and keep the form from showing saved metadata."
+        }
+      ]
+    },
+    "TR-REQ-2.3-CANCEL": {
+      "source": "UI-book-form-cancel",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "draftBook.name",
+        "draftBook.description",
+        "draftBook.tags"
+      ],
+      "write": [
+        "draftBook.name",
+        "draftBook.description",
+        "draftBook.tags"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-books-page",
+          "description": "Discard the in-memory draft values entered in UI-book-form-name, UI-book-form-description and UI-book-form-tags; do not call API-create-book and do not persist the pending book. Navigate back to the Books page, with UI-books-page as the destination root reference. The Books page mount trigger loads persisted books from GET /api/books, so the cancelled name must not appear because no creation request was made."
+        }
+      ]
+    },
+    "TR-REQ-2.4-EDIT-SAVE": {
+      "source": "UI-book-edit-form",
+      "event": "submit",
+      "guard": "draftBook.name is non-empty after trimming and the edit form is not already submitting an update request.",
+      "read": [
+        "draftBook.name",
+        "draftBook.description",
+        "draftBook.tags"
+      ],
+      "write": [
+        "book.name",
+        "book.description",
+        "book.tags"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-edit-name",
+          "description": "Validate the submitted draftBook.name by trimming it and requiring a non-empty value. If it is empty, keep the Edit Book form open, show a required-name validation message associated with UI-book-edit-name, and stop without calling API-update-book or navigating."
+        },
+        {
+          "kind": "api",
+          "api": "API-update-book",
+          "description": "When validation passes, call PUT /api/books/{id} with id taken from the Book route parameter for the book currently being edited. Send body title as trimmed draftBook.name, description as draftBook.description or null when empty as allowed by the API, and tags parsed from draftBook.tags by splitting on commas, trimming each label, dropping empty labels, and sending null when no labels remain. On 200 success, set book.name from response.title, book.description from response.description or an empty string when null, and book.tags to a comma-separated string from response.tags or an empty string when null; then navigate to the Book detail route /books/:id using response.id, with UI-book-page as the destination root reference. Do not rely on these in-memory values for later reloads; the Book page mount trigger re-fetches persisted data. On 409 duplicate-title rejection, remain on the Edit Book form, show the returned error message, keep the pending draft values, and do not navigate. On 404 rejection, remain on the Edit Book page and surface the not-found/load-failure state. On other rejection, remain on the form and surface the failure."
+        }
+      ]
+    },
+    "TR-REQ-2.4-EDIT-CANCEL": {
+      "source": "UI-book-edit-cancel",
+      "event": "click",
+      "guard": null,
+      "read": [
+        "book.name",
+        "book.description",
+        "book.tags"
+      ],
+      "write": [
+        "draftBook.name",
+        "draftBook.description",
+        "draftBook.tags"
+      ],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-edit-form",
+          "description": "Discard the pending edit by resetting draftBook.name to book.name, draftBook.description to book.description, and draftBook.tags to book.tags. Do not call API-update-book and do not persist the proposed replacements."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Navigate back to the Book detail route /books/:id using the Book route parameter id, with UI-book-page as the destination root reference. The Book page mount trigger reloads the persisted book, so the original heading and description return and no heading shows the proposed replacement name."
+        }
+      ]
+    },
+    "TR-REQ-2.5-OPEN-DELETE": {
+      "source": "UI-book-delete-button",
+      "event": "click",
+      "guard": "The current Book route :id parameter is present and identifies the opened book.",
+      "read": [],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-delete-page",
+          "description": "Navigate to the Delete Book confirmation route /books/:id/delete using the id of the currently opened book from the Book route parameter, not the displayed book name. Implementation chooses the router or native navigation mechanism; UI-book-delete-page is the destination page root reference. The delete page mount then loads the persisted book data needed for the confirmation message."
+        }
+      ]
+    },
+    "TR-REQ-2.5-LOAD-DELETE": {
+      "source": "UI-book-delete-page",
+      "event": "mount",
+      "guard": "A non-empty Book route :id parameter is present for the delete confirmation page.",
+      "read": [],
+      "write": [
+        "book.name"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-book",
+          "description": "On Delete Book page entry, reload, or direct reopening, call GET /api/books/{id} with id taken from the delete route parameter so the confirmation reflects persisted data rather than only previously loaded form state. On 200 success, set book.name from response.title so UI-book-delete-message shows the saved business name; response.id, response.title and response.description are read for confirmation context but are not altered. On 404 rejection, do not fabricate a book name; surface the not-found/load-failure state and leave stored records unchanged."
+        }
+      ]
+    },
+    "TR-REQ-2.5-CANCEL-DELETE": {
+      "source": "UI-book-delete-cancel",
+      "event": "click",
+      "guard": null,
+      "read": [],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "Cancel the deletion without calling any delete API. Navigate back to the Book detail route /books/:id using the same book id from the delete route parameter. The Book page entry then reloads the persisted book through TR-REQ-2.2-LOAD-BOOK, so UI-book-heading and UI-book-description show the original unchanged heading and description."
+        }
+      ]
+    },
+    "TR-REQ-2.5-CONFIRM-DELETE": {
+      "source": "UI-book-delete-confirm",
+      "event": "click",
+      "guard": "The delete route :id parameter is present for the selected book.",
+      "read": [
+        "books.items"
+      ],
+      "write": [
+        "books.items"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-delete-book",
+          "description": "Call DELETE /api/books/{id} once, with id taken from the delete route parameter for the selected book. On 200 success, remove any matching returned id from the frontend books.items list so the deleted book is not shown as an entry; do not alter the book's heading or description to simulate retention. On 404 rejection, do not remove any list entry, do not treat the deletion as successful, and surface the failure on the delete page."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-books-page",
+          "description": "Only after successful deletion, navigate to the Books route /books. The Books page entry then reloads the persisted list through TR-REQ-2.1-LOAD-BOOKS, ensuring the deleted book is absent immediately and after subsequent reload/reopening. Do not navigate on deletion failure."
+        }
+      ]
+    },
+    "TR-REQ-3.1-SAVE-PAGE": {
+      "source": "UI-page-form",
+      "event": "submit",
+      "guard": "The Book route :id parameter is present and no create-page request is already in progress.",
+      "read": [
+        "draftPage.title",
+        "draftPage.content"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-create-page",
+          "description": "Submit POST /api/books/{bookId}/pages with bookId taken from the current Book route :id parameter. Use draftPage.title as the JSON title and draftPage.content as the JSON body, converting an empty content value to null when the user left the textarea blank. On 201 success, continue to the navigation action without treating the create response as already-displayed Page list state. On 404 or 409 rejection, stay on the New Page form and surface the returned error message so the user can correct the missing book or duplicate title; do not navigate or add a Page list entry."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-book-page",
+          "description": "After API-create-page returns 201 success, navigate to the parent Book page root UI-book-page at /books/{bookId}, using the same bookId from the Book route :id parameter. The Book page entry mount then reloads the persisted Book and Page list through TR-REQ-2.2-LOAD-BOOK, so the new page appears exactly once in UI-book-page-list. Do not perform this navigation on 404 or 409 rejection."
+        }
+      ]
+    },
+    "TR-REQ-3.2-OPEN-PAGE": {
+      "source": "UI-book-page-list",
+      "event": "click",
+      "guard": "The activated entry is one of the current book.pages entries and has a non-empty page id; the Book route :id parameter is present.",
+      "read": [
+        "book.pages"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-page-read-page",
+          "description": "Navigate to the Page read route /books/:id/pages/:pageId. Take :id from the current Book route parameter and :pageId from the activated book.pages entry's id, not from its displayed title. Implementation chooses the router or native navigation mechanism; UI-page-read-page is the destination page root reference. The Page read page mount then loads the persisted page data."
+        }
+      ]
+    },
+    "TR-REQ-3.2-LOAD-READ-PAGE": {
+      "source": "UI-page-read-page",
+      "event": "mount",
+      "guard": "A non-empty Page route :pageId parameter is present.",
+      "read": [],
+      "write": [
+        "page.title",
+        "page.content"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-page",
+          "description": "On Page read page entry, reload, or direct reopening, call GET /api/pages/{pageId} using pageId from the Page route :pageId parameter, not from book.pages or the displayed title. On 200 success, set page.title from response.title so UI-page-read-heading shows the saved title, and set page.content from response.body so UI-page-read-body shows the saved body; if response.body is null, represent that as no saved body rather than fabricating text. On 404 rejection, surface the not-found/load-failure state and do not fabricate a page title or body."
+        }
+      ]
+    },
+    "TR-REQ-3.2-LOAD-EDIT-PAGE": {
+      "source": "UI-page-edit-page",
+      "event": "mount",
+      "guard": "A non-empty Page route :pageId parameter is present.",
+      "read": [],
+      "write": [
+        "page.title",
+        "page.content",
+        "draftPage.title",
+        "draftPage.content"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-page",
+          "description": "On Edit Page entry, reload, or reopening, call GET /api/pages/{pageId} using pageId from the Page route :pageId parameter. On 200 success, set page.title and page.content from response.title and response.body so the saved page values are available, and prefill draftPage.title from response.title and draftPage.content from response.body so UI-page-edit-title and UI-page-edit-content show the saved title and body; if response.body is null, set draftPage.content to an empty string so the content field is blank rather than fabricating content. Save Page visibility is static. On 404 rejection, surface the not-found/load-failure state and do not fabricate title or body values."
+        }
+      ]
+    }
+  },
+  "requirements": {
+    "ROOT": [],
+    "REQ-1": [],
+    "REQ-1.1": [],
+    "REQ-2": [],
+    "REQ-2.1": [
+      "TR-REQ-2.1-NAV-BOOKS",
+      "TR-REQ-2.1-LOAD-BOOKS"
+    ],
+    "REQ-2.2": [
+      "TR-REQ-2.1-LOAD-BOOKS",
+      "TR-REQ-2.2-OPEN-BOOK",
+      "TR-REQ-2.2-LOAD-BOOK"
+    ],
+    "REQ-2.3": [
+      "TR-REQ-2.1-LOAD-BOOKS",
+      "TR-REQ-2.3-CREATE-SAVE",
+      "TR-REQ-2.2-LOAD-BOOK",
+      "TR-REQ-2.3-LOAD-EDIT",
+      "TR-REQ-2.3-CANCEL"
+    ],
+    "REQ-2.4": [
+      "TR-REQ-2.3-LOAD-EDIT",
+      "TR-REQ-2.4-EDIT-SAVE",
+      "TR-REQ-2.4-EDIT-CANCEL",
+      "TR-REQ-2.2-LOAD-BOOK"
+    ],
+    "REQ-2.5": [
+      "TR-REQ-2.5-OPEN-DELETE",
+      "TR-REQ-2.5-LOAD-DELETE",
+      "TR-REQ-2.5-CANCEL-DELETE",
+      "TR-REQ-2.5-CONFIRM-DELETE"
+    ],
+    "REQ-3": [],
+    "REQ-3.1": [
+      "TR-REQ-2.2-LOAD-BOOK",
+      "TR-REQ-3.1-SAVE-PAGE"
+    ],
+    "REQ-3.2": [
+      "TR-REQ-3.2-OPEN-PAGE",
+      "TR-REQ-3.2-LOAD-READ-PAGE",
+      "TR-REQ-3.2-LOAD-EDIT-PAGE"
+    ]
+  },
+  "steps": {
+    "STEP-REQ-1.1-01-01": [],
+    "STEP-REQ-2.1-01-01": [
+      "TR-REQ-2.1-NAV-BOOKS",
+      "TR-REQ-2.1-LOAD-BOOKS"
+    ],
+    "STEP-REQ-2.2-01-01": [
+      "TR-REQ-2.1-LOAD-BOOKS",
+      "TR-REQ-2.2-OPEN-BOOK",
+      "TR-REQ-2.2-LOAD-BOOK"
+    ],
+    "STEP-REQ-2.3-01-01": [
+      "TR-REQ-2.1-LOAD-BOOKS",
+      "TR-REQ-2.3-CREATE-SAVE",
+      "TR-REQ-2.2-LOAD-BOOK",
+      "TR-REQ-2.3-LOAD-EDIT"
+    ],
+    "STEP-REQ-2.3-02-01": [
+      "TR-REQ-2.3-CANCEL",
+      "TR-REQ-2.1-LOAD-BOOKS"
+    ],
+    "STEP-REQ-2.4-01-01": [
+      "TR-REQ-2.3-LOAD-EDIT",
+      "TR-REQ-2.4-EDIT-SAVE",
+      "TR-REQ-2.2-LOAD-BOOK"
+    ],
+    "STEP-REQ-2.4-02-01": [
+      "TR-REQ-2.3-LOAD-EDIT",
+      "TR-REQ-2.4-EDIT-CANCEL",
+      "TR-REQ-2.2-LOAD-BOOK"
+    ],
+    "STEP-REQ-2.5-01-01": [
+      "TR-REQ-2.5-OPEN-DELETE",
+      "TR-REQ-2.5-LOAD-DELETE",
+      "TR-REQ-2.5-CONFIRM-DELETE",
+      "TR-REQ-2.1-LOAD-BOOKS"
+    ],
+    "STEP-REQ-2.5-02-01": [
+      "TR-REQ-2.5-OPEN-DELETE",
+      "TR-REQ-2.5-LOAD-DELETE",
+      "TR-REQ-2.5-CANCEL-DELETE",
+      "TR-REQ-2.2-LOAD-BOOK"
+    ],
+    "STEP-REQ-3.1-01-01": [
+      "TR-REQ-2.2-LOAD-BOOK",
+      "TR-REQ-3.1-SAVE-PAGE"
+    ],
+    "STEP-REQ-3.2-01-01": [
+      "TR-REQ-3.2-OPEN-PAGE",
+      "TR-REQ-3.2-LOAD-READ-PAGE"
+    ],
+    "STEP-REQ-3.2-02-01": [
+      "TR-REQ-3.2-OPEN-PAGE",
+      "TR-REQ-3.2-LOAD-READ-PAGE",
+      "TR-REQ-3.2-LOAD-EDIT-PAGE"
+    ]
+  }
+}

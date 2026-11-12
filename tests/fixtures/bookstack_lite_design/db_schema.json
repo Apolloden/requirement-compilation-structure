@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "Book": {
+      "description": "A public book workspace entry created through the UI and persisted across navigation and reload; the Browse Books list shows each book exactly once by its business name.",
+      "fields": {
+        "id": {
+          "description": "Unique identifier for the book.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": true,
+          "unique": true,
+          "references": null,
+          "constraints": []
+        },
+        "title": {
+          "description": "Display title of the book; serves as the business name that uniquely identifies each book entry in the Book list.",
+          "type": "string",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "references": null,
+          "constraints": [
+            "Must be unique across books; each book entry is uniquely identified by its business name."
+          ]
+        },
+        "created_at": {
+          "description": "Timestamp when the book was created.",
+          "type": "datetime",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "description": {
+          "description": "Optional descriptive text recorded as book metadata when the book is created or edited.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "tags": {
+          "description": "Collection of tag labels attached to the book as metadata when the book is created or edited; persisted with the book across reload.",
+          "type": "json",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": [
+            "Stored as a list of tag label strings."
+          ]
+        }
+      }
+    },
+    "Page": {
+      "description": "A page published inside a book; its title and body are saved through the New Page form and it appears exactly once in the parent book's Page list across navigation and reload.",
+      "fields": {
+        "id": {
+          "description": "Unique identifier for the page.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": true,
+          "unique": true,
+          "references": null,
+          "constraints": []
+        },
+        "book_id": {
+          "description": "Identifier of the parent book that owns this page; retained when the page is saved.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": "Book.id",
+          "constraints": []
+        },
+        "title": {
+          "description": "Title entered in the Page title textbox; uniquely identifies the page entry within its parent book, shown as a button or link in the Page list.",
+          "type": "string",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": [
+            "Must be unique within the parent book; a book's Page list shows exactly one entry per page title."
+          ]
+        },
+        "content": {
+          "description": "Text content of the page.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "published": {
+          "description": "Whether the page is published and therefore publicly visible.",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "created_at": {
+          "description": "Timestamp when the page was published.",
+          "type": "datetime",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "body": {
+          "description": "Page content entered in the 'Write your page content here...' textbox and published with the page.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        }
+      }
+    }
+  },
+  "requirements": {
+    "REQ-1.1": [
+      "Book.id",
+      "Book.title",
+      "Page.book_id",
+      "Page.content",
+      "Page.id",
+      "Page.published",
+      "Page.title"
+    ],
+    "REQ-2.1": [
+      "Book.created_at",
+      "Book.description",
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-2.2": [
+      "Book.description",
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-2.3": [
+      "Book.created_at",
+      "Book.description",
+      "Book.id",
+      "Book.tags",
+      "Book.title"
+    ],
+    "REQ-2.4": [
+      "Book.created_at",
+      "Book.description",
+      "Book.id",
+      "Book.tags",
+      "Book.title"
+    ],
+    "REQ-2.5": [
+      "Book.description",
+      "Book.id",
+      "Book.title"
+    ],
+    "REQ-3.1": [
+      "Book.id",
+      "Book.title",
+      "Page.body",
+      "Page.book_id",
+      "Page.created_at",
+      "Page.id",
+      "Page.title"
+    ],
+    "REQ-3.2": [
+      "Page.body",
+      "Page.book_id",
+      "Page.id",
+      "Page.published",
+      "Page.title"
+    ]
+  }
+}
