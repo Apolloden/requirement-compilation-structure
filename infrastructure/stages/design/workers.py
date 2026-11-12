@@ -15,6 +15,7 @@ from infrastructure.stages.backend.primitives import validate_design
 from infrastructure.stages.database.obligations.records import check_symbols, normalize_inference, normalize_obligations
 from infrastructure.stages.database.schema import check_related_fields
 from infrastructure.stages.design.contract import API_KEYS, check_naming, check_ui, element_format_problems
+from infrastructure.stages.design.names import named_elements
 from infrastructure.stages.design.planner import (PLAN_ATTEMPTS, check_api_list, reject, requirement_records,
     ui_skeleton)
 from infrastructure.stages.frontend.triggers.design import (api_ids, apply_decomposition, empty_triggers,
@@ -173,7 +174,10 @@ links, buttons, fields and regions; text for headings; placeholder with no label
 the listed name is a placeholder. Every link or button you add must be listed in
 ui_plan.naming for its page, unless its name is filled in at runtime (a record's own
 title, for example): for such a control leave prop.label out and declare the value in
-data. Include every supplied requirement ID and step ID."""
+data. other_pages lists the named controls that already exist on pages outside this call:
+when a step uses one of them (a link on another page that leads here, say), list its
+existing ID in requirement_ui and step_ui and never re-create it. Include every supplied
+requirement ID and step ID."""
 
 U_INSTRUCTIONS = GROUP_HEADER + "\n\n" + UI_INSTRUCTIONS + "\n\n" + U_OUTPUT
 
@@ -204,7 +208,11 @@ def ui_worker(state: dict, leaves: list[str], tree, contexts: dict, model, conso
     pages = call_pages(state, leaves)
     request = {"requirements": [contexts[leaf] for leaf in leaves],
         "ui_plan": {"pages": ui_plan["pages"], "naming": ui_plan["naming"]},
-        "pages": {pid: page_context(ui, pid) for pid in pages}}
+        "pages": {pid: page_context(ui, pid) for pid in pages},
+        # Steps often start on another page ("on the home page, click Login"): list that page's
+        # existing named controls so the step can use their IDs instead of guessing or re-creating them.
+        "other_pages": {pid: {uid: {"role": role, "name": name} for uid, role, name in named_elements(ui, pid, ui_plan)}
+            for pid in ui["pages"] if pid not in pages}}
     roots = {page["root"] for page in ui["pages"].values()}
     header = {uid for uid, node in ui["elements"].items() if (node.get("prop") or {}).get("layout") is True}
 

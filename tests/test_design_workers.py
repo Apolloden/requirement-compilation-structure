@@ -187,3 +187,16 @@ class ElementFormat(unittest.TestCase):                                       # 
         workers.ui_worker(state, GROUPS["REQ-2"], tree, lite_contexts(tree), model, Mock())
         self.assertEqual(model.calls, 2)
         self.assertIn(f"elements.{uid}: mode must be an array", model.requests[1][1]["correction"]["error"])
+
+class CrossPageControls(unittest.TestCase):                                   # found in the paid run on the sample input
+    def test_ui_request_lists_named_controls_of_other_pages(self):
+        # A step that starts on another page ("on the home page, click Login") must be able to name
+        # that page's existing control instead of guessing an ID or re-creating the control.
+        from design_fixtures import lite_contexts
+        tree = lite_tree(); state = ui_state(("REQ-1", "REQ-2"))
+        model = ReplayModel([answer("u_REQ-3")])
+        workers.ui_worker(state, GROUPS["REQ-3"], tree, lite_contexts(tree), model, Mock())
+        request = model.requests[0][1]
+        self.assertEqual(request["other_pages"]["home"]["UI-nav-books"], {"role": "link", "name": "Books"})
+        self.assertFalse(set(request["other_pages"]) & set(request["pages"]))
+        self.assertIn("other_pages lists the named controls", model.requests[0][0])
