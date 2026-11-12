@@ -14,7 +14,7 @@ from infrastructure.shared.agent.proposals import propose_json
 from infrastructure.stages.backend.primitives import validate_design
 from infrastructure.stages.database.obligations.records import check_symbols, normalize_inference, normalize_obligations
 from infrastructure.stages.database.schema import check_related_fields
-from infrastructure.stages.design.contract import API_KEYS, check_naming, check_ui
+from infrastructure.stages.design.contract import API_KEYS, check_naming, check_ui, element_format_problems
 from infrastructure.stages.design.planner import (PLAN_ATTEMPTS, check_api_list, reject, requirement_records,
     ui_skeleton)
 from infrastructure.stages.frontend.triggers.design import (api_ids, apply_decomposition, empty_triggers,
@@ -216,8 +216,8 @@ def ui_worker(state: dict, leaves: list[str], tree, contexts: dict, model, conso
         for uid, node in returned.items():
             if uid in roots or uid in header:
                 problems.append(f"elements.{uid}: is a page root or a shared header element; do not return it")
-            elif not isinstance(node, dict):
-                problems.append(f"elements.{uid}: must be an element record")
+            elif element_format_problems(f"elements.{uid}", node):
+                problems.extend(element_format_problems(f"elements.{uid}", node))
             elif (node.get("prop") or {}).get("layout"):
                 problems.append(f"elements.{uid}: prop.layout is reserved for the shared header")
         reject(problems)

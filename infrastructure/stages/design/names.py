@@ -1,7 +1,7 @@
 """The role and name of a design element, as a browser test would look it up.
 
 A test written from the requirement text finds a control by its role and its visible name
-(for example the link "Books" or the text box named by its placeholder). These helpers read
+(for example the link "Home" or the text box named by its placeholder). These helpers read
 the same two facts from a design element so the design can be checked against them."""
 
 ROLES = ("link", "button", "heading", "textbox", "combobox", "checkbox", "region")

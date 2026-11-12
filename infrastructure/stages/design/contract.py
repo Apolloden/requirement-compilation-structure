@@ -95,7 +95,7 @@ def check_schema(schema, tree, problems):
 
 
 def route_key(method, path):
-    """Method and path with path parameters made equal, so /books/{id} and /books/:bookId clash."""
+    """Method and path with path parameters made equal, so /items/{id} and /items/:itemId clash."""
     return (method, re.sub(r"\{[^}]+\}|:[A-Za-z_]+", "{}", str(path)))
 
 
@@ -159,6 +159,30 @@ def check_backend(backend, schema, obligations, tree, problems):
     guarded(problems, "backend_apis: symbols", lambda: check_symbols(apis.values(), schema))
     guarded(problems, "backend_apis: obligation coverage",
         lambda: validate_design(backend, obligations, complete=True, tree=tree))
+
+
+def element_format_problems(where: str, node) -> list[str]:
+    """The page-element record format: {type, parent, mode: [], data: [{var, dtype, ...}], prop: {}}."""
+    if not isinstance(node, dict):
+        return [f"{where}: must be an element record {{type, parent, mode, data, prop}}"]
+    problems = []
+    if not isinstance(node.get("type"), str) or not node["type"]:
+        problems.append(f"{where}: type must be a string such as container, link, button, heading or input")
+    if not isinstance(node.get("mode", []), list):
+        problems.append(f"{where}: mode must be an array (user_read and/or user_write, or [])")
+    data = node.get("data", [])
+    if not isinstance(data, list):
+        problems.append(f"{where}: data must be an array of variable declarations {{var, dtype, constraints}}; "
+            "fixed text belongs in prop (label for links, buttons and fields, text for headings)")
+    else:
+        for declaration in data:
+            if not isinstance(declaration, dict) or not isinstance(declaration.get("var"), str):
+                problems.append(f"{where}: data entries need a var name")
+            elif declaration.get("dtype") not in DTYPES:
+                problems.append(f"{where}: dtype {declaration.get('dtype')!r} is not one of {sorted(DTYPES)}")
+    if not isinstance(node.get("prop", {}), dict):
+        problems.append(f"{where}: prop must be an object of fixed properties (label, text, placeholder, href, ...)")
+    return problems
 
 
 def check_ui(ui, tree, images, problems, skipped=frozenset()):

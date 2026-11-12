@@ -6,7 +6,7 @@ route per page, one name per control) are made once instead of once per requirem
 from copy import deepcopy
 
 from infrastructure.shared.agent.proposals import propose_json
-from infrastructure.stages.design.contract import METHODS, check_entities, route_key
+from infrastructure.stages.design.contract import METHODS, check_entities, element_format_problems, route_key
 from infrastructure.stages.design.names import ROLES, element_name, element_role
 from infrastructure.stages.frontend.ui.design import normalize_design
 
@@ -126,6 +126,13 @@ layout.elements is the shared header and navigation, designed once: a map of ELE
 ("UI-layout-...") to {type, parent, mode, data, prop}, the same format as page elements.
 A top-level header element has parent null. Put a control here only when the requirements
 say it is available across pages. Return {"elements": {}} when there is no shared header.
+Header elements use the page-element format: type is container, link, button, heading,
+text, list, image, input or select; mode is an array (user_read and/or user_write, or []);
+data is an array of variable declarations {var, dtype, constraints} for values loaded at
+runtime, usually []; prop holds fixed text and attributes: label for links, buttons and
+fields, text for headings, href for links. Example header link: {"type": "link",
+"parent": "UI-layout-nav", "mode": ["user_read"], "data": [], "prop": {"label": "Home",
+"href": "/"}}.
 
 naming lists every control the requirement text names:
 {"name": exact text, "role": link, button, heading, textbox, combobox, checkbox or region,
@@ -228,13 +235,10 @@ def check_ui_plan(answer, tree, images) -> None:
         parent = node.get("parent")
         if parent is not None and parent not in header:
             problems.append(f"layout.elements.{lid}: parent must be null or another layout element, not {parent!r}")
-    header_pages = [pid for pid, page in pages.items() if page.get("layout") is True]
-    for lid, role, name in header_controls({"layout": {"elements": {k: v for k, v in header.items() if isinstance(v, dict)}},
-                                            "naming": naming}):
-        for pid in header_pages:
-            if (role, name, pid) in seen:
-                problems.append(f"layout.elements.{lid}: header {role} {name!r} repeats naming[{seen[(role, name, pid)]}] "
-                    f"on header page {pid}; keep the header control only and remove {pid} from that naming entry")
+        problems.extend(element_format_problems(f"layout.elements.{lid}", node))
+        label = (node.get("prop") or {}).get("label") if isinstance(node.get("prop"), dict) else None
+        if node.get("type") in ("link", "button") and (not isinstance(label, str) or not label.strip()):
+            problems.append(f"layout.elements.{lid}: a header link or button needs its visible name in prop.label")
     reject(problems)
 
 
@@ -253,11 +257,17 @@ def plan_ui(tree, contexts: dict, images: dict, data_plan: dict, model, console)
     ui_plan, _ = propose_json(model, P2_INSTRUCTIONS, request, accept, console, "Plan P2 UI", PLAN_ATTEMPTS)
     ui_plan = deepcopy(ui_plan)
     header_pages = [pid for pid, page in ui_plan["pages"].items() if page.get("layout") is True]
-    listed = {(entry["role"], entry["name"]) for entry in ui_plan["naming"]}
+    # Every header link or button is listed for every header page. An entry the planner already wrote
+    # for it is kept: the header copy is that control on the page. A page's own second copy is rejected
+    # later by the UI worker's naming check and by the stage 08 strict test.
     for _, role, name in header_controls(ui_plan):
-        if role in ("link", "button") and (role, name) not in listed and header_pages:
-            ui_plan["naming"].append({"name": name, "role": role, "pages": list(header_pages)})
-            listed.add((role, name))
+        if role not in ("link", "button"):
+            continue
+        covered = {pid for entry in ui_plan["naming"] if (entry["role"], entry["name"]) == (role, name)
+            for pid in entry["pages"]}
+        missing = [pid for pid in header_pages if pid not in covered]
+        if missing:
+            ui_plan["naming"].append({"name": name, "role": role, "pages": missing})
     return ui_plan
 
 

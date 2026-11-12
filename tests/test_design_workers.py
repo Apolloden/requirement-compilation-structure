@@ -176,3 +176,14 @@ class WrongShapeRepairs(unittest.TestCase):                                  # R
         workers.data_worker(state, GROUPS["REQ-2"], tree, model, Mock())
         self.assertEqual(model.calls, 2)
         self.assertIn("conventions", model.requests[1][1]["correction"]["error"])
+
+class ElementFormat(unittest.TestCase):                                       # found in the first paid plan-stage run
+    def test_ui_element_in_the_wrong_format_is_sent_back(self):
+        from design_fixtures import lite_contexts
+        tree = lite_tree(); state = ui_state(("REQ-1",))
+        bad = answer("u_REQ-2"); uid = next(iter(bad["elements"]))
+        bad["elements"][uid] = {**bad["elements"][uid], "mode": "static", "data": {"text": "x"}}
+        model = ReplayModel([bad, answer("u_REQ-2")])
+        workers.ui_worker(state, GROUPS["REQ-2"], tree, lite_contexts(tree), model, Mock())
+        self.assertEqual(model.calls, 2)
+        self.assertIn(f"elements.{uid}: mode must be an array", model.requests[1][1]["correction"]["error"])

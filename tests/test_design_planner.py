@@ -52,13 +52,20 @@ class UiPlan(unittest.TestCase):
         entry = next(e for e in plan["naming"] if e["name"] == "Home")
         self.assertEqual((entry["role"], sorted(entry["pages"])), ("link", sorted(plan["pages"])))
 
-    def test_header_control_that_repeats_a_page_control_is_rejected(self):
-        bad = answer("p2"); bad["layout"]["elements"] = {**HEADER, "UI-layout-nav-books": {"type": "link",
+    def test_header_control_that_is_also_in_the_naming_table_covers_every_header_page(self):
+        # Changed after the paid plan-stage run of 2026-11-12: the plan's rule rejected this answer
+        # (test_header_control_that_repeats_a_page_control_is_rejected), and the real model failed it
+        # in 3 of 3 attempts, which sent the whole stage to the classic fallback. A naming entry is not
+        # an element: the header copy is the one "Books" link on each header page. A second, page-level
+        # link is still rejected by the UI worker's naming check and by the stage 08 strict test.
+        with_header = answer("p2"); with_header["layout"]["elements"] = {**HEADER, "UI-layout-nav-books": {"type": "link",
             "parent": "UI-layout-header", "mode": [], "data": [], "prop": {"label": "Books", "href": "/books"}}}
-        for page in bad["pages"].values(): page["layout"] = True
-        plan, model = self.plan([bad, answer("p2")])
-        self.assertEqual(model.calls, 2)
-        self.assertIn("'Books'", model.requests[1][1]["correction"]["error"])
+        for page in with_header["pages"].values(): page["layout"] = True
+        plan, model = self.plan([with_header])
+        self.assertEqual(model.calls, 1)
+        entries = [e for e in plan["naming"] if (e["role"], e["name"]) == ("link", "Books")]
+        covered = [pid for e in entries for pid in e["pages"]]
+        self.assertEqual(sorted(covered), sorted(plan["pages"]))               # every header page, once each
 
     def test_leaf_without_a_page_and_duplicate_route_are_rejected(self):
         bad = answer("p2")
@@ -85,3 +92,27 @@ class UiPlan(unittest.TestCase):
         _, model = self.plan([bad, answer("p2")])
         self.assertEqual(model.calls, 2)
         self.assertIn("pages.home: layout is true but layout.elements is empty", model.requests[1][1]["correction"]["error"])
+
+class HeaderFormat(unittest.TestCase):                                        # found in the first paid plan-stage run
+    def test_header_in_the_wrong_element_format_is_rejected(self):
+        # The shape the real model returned: fixed text in data, mode as a string, no prop.label.
+        bad = answer("p2")
+        bad["layout"]["elements"] = {
+            "UI-layout-header": {"type": "container", "parent": None, "mode": "static", "data": {"label": "Header"}, "prop": {}},
+            "UI-layout-home": {"type": "link", "parent": "UI-layout-header", "mode": "static",
+                               "data": {"text": "Home", "href": "/"}, "prop": {}}}
+        for page in bad["pages"].values(): page["layout"] = True
+        tree = lite_tree(); model = ReplayModel([bad, answer("p2")])
+        planner.plan_ui(tree, lite_contexts(tree), lite_images(), answer("p1"), model, Mock())
+        self.assertEqual(model.calls, 2)
+        error = model.requests[1][1]["correction"]["error"]
+        self.assertIn("layout.elements.UI-layout-home: mode must be an array", error)
+        self.assertIn("layout.elements.UI-layout-home: data must be an array", error)
+        self.assertIn("layout.elements.UI-layout-home: a header link or button needs its visible name in prop.label", error)
+
+    def test_well_formed_header_is_accepted(self):
+        good = answer("p2"); good["layout"]["elements"] = HEADER
+        for page in good["pages"].values(): page["layout"] = True
+        tree = lite_tree(); model = ReplayModel([good])
+        planner.plan_ui(tree, lite_contexts(tree), lite_images(), answer("p1"), model, Mock())
+        self.assertEqual(model.calls, 1)
