@@ -329,9 +329,12 @@ def check_artifacts(requirements: dict, schema: dict, obligations: dict, backend
 
 
 def check_design(arc: Path) -> list[str]:
-    """Load the design files from arc (and ui_plan.json when present) and check them."""
+    """Load the design files from arc (and ui_plan.json when present) and check them.
+
+    ui_plan.json lists the leaves the plan stage emptied on purpose under "skipped"."""
     def load(name):
         return json.loads((arc / name).read_text(encoding="utf-8"))
     plan = load("ui_plan.json") if (arc / "ui_plan.json").is_file() else None
+    skipped = frozenset((plan or {}).get("skipped") or [])
     return check_artifacts(load("requirements.json"), load("db_schema.json"), load("db_obligations.json"),
-        load("backend_apis.json"), load("ui_design.json"), load("frontend_triggers.json"), plan=plan)
+        load("backend_apis.json"), load("ui_design.json"), load("frontend_triggers.json"), plan=plan, skipped=skipped)

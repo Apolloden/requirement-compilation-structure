@@ -78,3 +78,16 @@ def lite_images() -> dict:
             visit(child)
     visit(load("requirements.json"))
     return found
+
+
+def make_lite_workspace(directory: Path) -> tuple[Path, Path]:
+    """(input_dir, arc_dir) as stage 01 leaves them for the lite fixture, with empty image files."""
+    input_dir, arc_dir = Path(directory) / "input", Path(directory) / "output" / ".arc"
+    arc_dir.mkdir(parents=True)
+    (arc_dir / "requirements.json").write_text((LITE / "requirements.json").read_text(encoding="utf-8"), encoding="utf-8")
+    (arc_dir / "visual_analysis.json").write_text("{}", encoding="utf-8")
+    for image in lite_images().values():
+        path = input_dir / image["reference"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
+    return input_dir, arc_dir

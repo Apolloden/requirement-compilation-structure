@@ -58,3 +58,15 @@ class Assemble(unittest.TestCase):
         self.assertEqual(problem_leaves("backend_apis: obligation coverage: failed for REQ-3.1: ...", tree), {"REQ-3.1"})
         self.assertEqual(problem_leaves("frontend_triggers.steps[STEP-REQ-2.3-01-01]: unknown trigger X", tree), {"REQ-2.3"})
         self.assertEqual(problem_leaves("ui_design.pages.home: root 'UI-ghost' is not an element", tree), set())
+
+    def test_written_files_with_a_skipped_leaf_pass_check_design(self):
+        # Added: check_design must know which leaves the plan emptied on purpose; ui_plan.json records them.
+        state = full_state(); state["skipped"] = ["REQ-3.2"]
+        files, problems = assemble(state, lite_tree(), load("requirements.json"))
+        self.assertEqual(problems, [])
+        self.assertEqual(files["ui_plan.json"]["skipped"], ["REQ-3.2"])
+        with TemporaryDirectory() as directory:
+            arc = Path(directory)
+            (arc / "requirements.json").write_text((Path(__file__).parent / "fixtures/bookstack_lite_design/requirements.json").read_text())
+            write_design(arc, files)
+            self.assertEqual(check_design(arc), [])

@@ -1,5 +1,6 @@
 """Run all compilation passes or one selected pass in the same pipeline."""
 
+import os
 from pathlib import Path
 import traceback
 
@@ -14,13 +15,14 @@ from infrastructure.pipeline.ui_design import design_frontend_ui
 from infrastructure.pipeline.ui_implementation import implement_frontend_ui
 from infrastructure.pipeline.frontend_triggers import design_frontend_triggers
 from infrastructure.pipeline.frontend_implementation import implement_frontend_triggers
+from infrastructure.pipeline.plan_design import plan_design
 from infrastructure.utils.presentation.console import show_panel
 from infrastructure.utils.presentation.logging import console_log
 from infrastructure.utils.files import save_json
 from infrastructure.shared.project.git import checkpoint
 
 
-PIPELINE = (
+CLASSIC_PIPELINE = (
     ("00_project_initialization", project_initialization, "project_files"),
     ("01_explore_requirement", explore_requirement, "requirements"),
     ("02_build_db_schema", build_db_schema, "db_schema"),
@@ -33,6 +35,21 @@ PIPELINE = (
     ("09_design_frontend_triggers", design_frontend_triggers, "frontend_triggers"),
     ("10_implement_frontend_tdd", implement_frontend_triggers, "frontend_e2e"),
 )
+
+# ArcFable: one plan stage replaces the design stages 02, 03, 05, 07 and 09.
+PLAN_STAGE = ("02_plan_design", plan_design, "design_plan")
+ARCFABLE_PIPELINE = tuple(entry for entry in CLASSIC_PIPELINE
+    if entry[0][:2] in {"00", "01", "04", "06", "08", "10"})
+ARCFABLE_PIPELINE = ARCFABLE_PIPELINE[:2] + (PLAN_STAGE,) + ARCFABLE_PIPELINE[2:]
+# Every stage name, for --stage and the help text.
+PIPELINE = CLASSIC_PIPELINE + (PLAN_STAGE,)
+
+
+def active_pipeline() -> tuple:
+    """ARC_DESIGN=classic selects today's pipeline; anything else (or nothing) selects ArcFable."""
+    if os.getenv("ARC_DESIGN", "arcfable").strip().lower() == "classic":
+        return CLASSIC_PIPELINE
+    return ARCFABLE_PIPELINE
 
 class Compiler:
     """Own shared paths, configuration, and results for one compilation."""
@@ -85,7 +102,7 @@ class Compiler:
 
     def compile(self, stage: str | None = None) -> Path:
         """Execute every pass, or only the selected pass using existing artifacts."""
-        passes = PIPELINE
+        passes = active_pipeline()
         if stage is not None:
             passes = ()
             for entry in PIPELINE:
@@ -102,7 +119,7 @@ class Compiler:
             if function is project_initialization:
                 result = self._run(name, function, self.output_dir, port=self.port, pause=self.pause)
             elif function in (explore_requirement, design_frontend_ui, implement_frontend_ui,
-                    design_frontend_triggers, implement_frontend_triggers):
+                    design_frontend_triggers, implement_frontend_triggers, plan_design):
                 result = self._run(name, function, self.input_dir, self.arc_dir, pause=self.pause)
             else:
                 result = self._run(name, function, self.arc_dir, pause=self.pause)

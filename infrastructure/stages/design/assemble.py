@@ -71,7 +71,8 @@ def files_of(state: dict, tree) -> dict:
         "ui_design.json": state["ui"],
         "frontend_triggers.json": state["triggers"],
         "shared_conventions.json": state["conventions"],
-        "ui_plan.json": state["ui_plan"],
+        # The plan also records the leaves it emptied on purpose, so check_design can tell them apart.
+        "ui_plan.json": {**(state["ui_plan"] or {}), "skipped": list(state["skipped"])},
     })
 
 

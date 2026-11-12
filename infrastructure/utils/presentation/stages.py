@@ -15,7 +15,13 @@ STAGES = {
 }
 
 
+# Stages that share a number with a classic stage but do something else.
+NAMED = {"02_plan_design": "Plan the whole design"}
+
+
 def stage_label(script: str) -> str:
     """Show the pipeline stage number and its purpose."""
     number = script[:2]
+    if script in NAMED:
+        return f"Stage {number} | {NAMED[script]}"
     return f"Stage {number} | {STAGES[number]}" if number in STAGES else script
