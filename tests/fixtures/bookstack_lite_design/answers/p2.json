@@ -1,0 +1,232 @@
+{
+  "pages": {
+    "home": {
+      "name": "Home",
+      "route": "/",
+      "images": [
+        "IMG-INDEX"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-1.1",
+        "REQ-2.1"
+      ]
+    },
+    "books": {
+      "name": "Books",
+      "route": "/books",
+      "images": [
+        "IMG-BOOKS"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-2.1",
+        "REQ-2.2",
+        "REQ-2.3",
+        "REQ-2.5"
+      ]
+    },
+    "book": {
+      "name": "Book",
+      "route": "/books/:id",
+      "images": [
+        "IMG-BOOK",
+        "IMG-DELETE-BOOK"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-2.2",
+        "REQ-2.3",
+        "REQ-2.4",
+        "REQ-2.5",
+        "REQ-3.1",
+        "REQ-3.2"
+      ]
+    },
+    "book_form": {
+      "name": "Create New Book",
+      "route": "/books/create",
+      "images": [
+        "IMG-CREATE-BOOK",
+        "IMG-EDIT-BOOK"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-2.3",
+        "REQ-2.4"
+      ]
+    },
+    "book_edit": {
+      "name": "Edit Book",
+      "route": "/books/:id/edit",
+      "images": [
+        "IMG-EDIT-BOOK"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-2.3",
+        "REQ-2.4"
+      ]
+    },
+    "book_delete": {
+      "name": "Delete Book",
+      "route": "/books/:id/delete",
+      "images": [
+        "IMG-DELETE-BOOK"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-2.5"
+      ]
+    },
+    "page_form": {
+      "name": "New Page",
+      "route": "/books/:id/pages/create",
+      "images": [],
+      "layout": false,
+      "requirements": [
+        "REQ-3.1"
+      ]
+    },
+    "page_read": {
+      "name": "Page",
+      "route": "/books/:id/pages/:pageId",
+      "images": [
+        "IMG-PAGE"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-3.2"
+      ]
+    },
+    "page_edit": {
+      "name": "Edit Page",
+      "route": "/books/:id/pages/:pageId/edit",
+      "images": [
+        "IMG-PAGE"
+      ],
+      "layout": false,
+      "requirements": [
+        "REQ-3.2"
+      ]
+    }
+  },
+  "layout": {
+    "elements": {}
+  },
+  "naming": [
+    {
+      "name": "Shelves",
+      "role": "link",
+      "pages": [
+        "home",
+        "books"
+      ]
+    },
+    {
+      "name": "Books",
+      "role": "link",
+      "pages": [
+        "home",
+        "books",
+        "book"
+      ]
+    },
+    {
+      "name": "Login",
+      "role": "link",
+      "pages": [
+        "home"
+      ]
+    },
+    {
+      "name": "Show / hide detailed information",
+      "role": "button",
+      "pages": [
+        "home"
+      ]
+    },
+    {
+      "name": "Dark mode",
+      "role": "button",
+      "pages": [
+        "home"
+      ]
+    },
+    {
+      "name": "View all",
+      "role": "link",
+      "pages": [
+        "home"
+      ]
+    },
+    {
+      "name": "Settings",
+      "role": "link",
+      "pages": [
+        "books"
+      ]
+    },
+    {
+      "name": "Create New Book",
+      "role": "link",
+      "pages": [
+        "books"
+      ]
+    },
+    {
+      "name": "Edit",
+      "role": "link",
+      "pages": [
+        "book",
+        "page_read"
+      ]
+    },
+    {
+      "name": "Delete",
+      "role": "button",
+      "pages": [
+        "book"
+      ]
+    },
+    {
+      "name": "New Page",
+      "role": "link",
+      "pages": [
+        "book"
+      ]
+    },
+    {
+      "name": "Cancel",
+      "role": "button",
+      "pages": [
+        "book_form",
+        "book_edit",
+        "book_delete"
+      ]
+    },
+    {
+      "name": "Save Book",
+      "role": "button",
+      "pages": [
+        "book_form",
+        "book_edit"
+      ]
+    },
+    {
+      "name": "Confirm Delete",
+      "role": "button",
+      "pages": [
+        "book_delete"
+      ]
+    },
+    {
+      "name": "Save Page",
+      "role": "button",
+      "pages": [
+        "page_form",
+        "page_edit"
+      ]
+    }
+  ]
+}

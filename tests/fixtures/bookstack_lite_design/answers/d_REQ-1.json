@@ -1,0 +1,31 @@
+{
+  "requirement_fields": {
+    "REQ-1.1": [
+      "Book.id",
+      "Book.title",
+      "Page.book_id",
+      "Page.content",
+      "Page.id",
+      "Page.published",
+      "Page.title"
+    ]
+  },
+  "obligations": {
+    "requirements": {
+      "REQ-1.1": {
+        "read": [],
+        "write": []
+      }
+    },
+    "steps": {
+      "STEP-REQ-1.1-01-01": {
+        "read": [],
+        "write": []
+      }
+    }
+  },
+  "apis": {},
+  "requirement_apis": {
+    "REQ-1.1": []
+  }
+}

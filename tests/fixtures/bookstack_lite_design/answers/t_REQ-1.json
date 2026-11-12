@@ -1,0 +1,9 @@
+{
+  "triggers": {},
+  "requirement_triggers": {
+    "REQ-1.1": []
+  },
+  "step_triggers": {
+    "STEP-REQ-1.1-01-01": []
+  }
+}

@@ -31,3 +31,50 @@ def artifacts(root: Path = LITE) -> dict:
         "ui": load("ui_design.json", root),
         "triggers": load("frontend_triggers.json", root),
     })
+
+
+REPLAY_ORDER = ["p1", "p2", "d_REQ-1", "d_REQ-2", "d_REQ-3", "u_REQ-1", "u_REQ-2", "u_REQ-3",
+    "t_REQ-1", "t_REQ-2", "t_REQ-3"]
+
+
+def answer(name: str) -> dict:
+    """One sliced model answer, for example answer("d_REQ-2")."""
+    return load(f"answers/{name}.json")
+
+
+class ReplayModel:
+    """A fake text model that returns the given answers in order and records every request."""
+    def __init__(self, answers: list) -> None:
+        self.answers = list(answers)
+        self.requests = []
+
+    @property
+    def calls(self) -> int:
+        return len(self.requests)
+
+    def generate_json(self, instructions, request):
+        # Copy the request: the proposal loop changes one request dict between attempts.
+        self.requests.append((instructions, copy.deepcopy(request)))
+        if not self.answers:
+            raise AssertionError("no answer left")
+        return copy.deepcopy(self.answers.pop(0))
+
+
+def lite_contexts(tree) -> dict:
+    """Per leaf: the requirement, its own steps and (empty) image analyses."""
+    return {leaf: {**tree.requirements[leaf], "steps": [tree.steps[s] for s in tree.own_steps[leaf]], "images": {}}
+        for leaf in tree.leaves}
+
+
+def lite_images() -> dict:
+    """Every image declared in the fixture requirements: {image ID: {"id", "page", "reference"}}."""
+    found = {}
+    def visit(node):
+        description = node.get("description")
+        if isinstance(description, dict):
+            for image in description.get("image") or []:
+                found.setdefault(image["id"], {"id": image["id"], "page": image.get("page"), "reference": image.get("reference")})
+        for child in node.get("children", []):
+            visit(child)
+    visit(load("requirements.json"))
+    return found

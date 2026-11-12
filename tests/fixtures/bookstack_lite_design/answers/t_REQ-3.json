@@ -1,0 +1,104 @@
+{
+  "triggers": {
+    "TR-REQ-3.1-SAVE-PAGE": {
+      "source": "UI-page-form",
+      "event": "submit",
+      "guard": "The Book route :id parameter is present and no create-page request is already in progress.",
+      "read": [
+        "draftPage.title",
+        "draftPage.content"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-create-page",
+          "description": "Submit POST /api/books/{bookId}/pages with bookId taken from the current Book route :id parameter. Use draftPage.title as the JSON title and draftPage.content as the JSON body, converting an empty content value to null when the user left the textarea blank. On 201 success, continue to the navigation action without treating the create response as already-displayed Page list state. On 404 or 409 rejection, stay on the New Page form and surface the returned error message so the user can correct the missing book or duplicate title; do not navigate or add a Page list entry."
+        },
+        {
+          "kind": "ui",
+          "ui": "UI-book",
+          "description": "After API-create-page returns 201 success, navigate to the parent Book page root UI-book-page at /books/{bookId}, using the same bookId from the Book route :id parameter. The Book page entry mount then reloads the persisted Book and Page list through TR-REQ-2.2-LOAD-BOOK, so the new page appears exactly once in UI-book-page-list. Do not perform this navigation on 404 or 409 rejection."
+        }
+      ]
+    },
+    "TR-REQ-3.2-OPEN-PAGE": {
+      "source": "UI-book-page-list",
+      "event": "click",
+      "guard": "The activated entry is one of the current book.pages entries and has a non-empty page id; the Book route :id parameter is present.",
+      "read": [
+        "book.pages"
+      ],
+      "write": [],
+      "action": [
+        {
+          "kind": "ui",
+          "ui": "UI-page_read",
+          "description": "Navigate to the Page read route /books/:id/pages/:pageId. Take :id from the current Book route parameter and :pageId from the activated book.pages entry's id, not from its displayed title. Implementation chooses the router or native navigation mechanism; UI-page-read-page is the destination page root reference. The Page read page mount then loads the persisted page data."
+        }
+      ]
+    },
+    "TR-REQ-3.2-LOAD-READ-PAGE": {
+      "source": "UI-page_read",
+      "event": "mount",
+      "guard": "A non-empty Page route :pageId parameter is present.",
+      "read": [],
+      "write": [
+        "page.title",
+        "page.content"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-page",
+          "description": "On Page read page entry, reload, or direct reopening, call GET /api/pages/{pageId} using pageId from the Page route :pageId parameter, not from book.pages or the displayed title. On 200 success, set page.title from response.title so UI-page-read-heading shows the saved title, and set page.content from response.body so UI-page-read-body shows the saved body; if response.body is null, represent that as no saved body rather than fabricating text. On 404 rejection, surface the not-found/load-failure state and do not fabricate a page title or body."
+        }
+      ]
+    },
+    "TR-REQ-3.2-LOAD-EDIT-PAGE": {
+      "source": "UI-page_edit",
+      "event": "mount",
+      "guard": "A non-empty Page route :pageId parameter is present.",
+      "read": [],
+      "write": [
+        "page.title",
+        "page.content",
+        "draftPage.title",
+        "draftPage.content"
+      ],
+      "action": [
+        {
+          "kind": "api",
+          "api": "API-get-page",
+          "description": "On Edit Page entry, reload, or reopening, call GET /api/pages/{pageId} using pageId from the Page route :pageId parameter. On 200 success, set page.title and page.content from response.title and response.body so the saved page values are available, and prefill draftPage.title from response.title and draftPage.content from response.body so UI-page-edit-title and UI-page-edit-content show the saved title and body; if response.body is null, set draftPage.content to an empty string so the content field is blank rather than fabricating content. Save Page visibility is static. On 404 rejection, surface the not-found/load-failure state and do not fabricate title or body values."
+        }
+      ]
+    }
+  },
+  "requirement_triggers": {
+    "REQ-3.1": [
+      "TR-REQ-2.2-LOAD-BOOK",
+      "TR-REQ-3.1-SAVE-PAGE"
+    ],
+    "REQ-3.2": [
+      "TR-REQ-3.2-OPEN-PAGE",
+      "TR-REQ-3.2-LOAD-READ-PAGE",
+      "TR-REQ-3.2-LOAD-EDIT-PAGE"
+    ]
+  },
+  "step_triggers": {
+    "STEP-REQ-3.1-01-01": [
+      "TR-REQ-2.2-LOAD-BOOK",
+      "TR-REQ-3.1-SAVE-PAGE"
+    ],
+    "STEP-REQ-3.2-01-01": [
+      "TR-REQ-3.2-OPEN-PAGE",
+      "TR-REQ-3.2-LOAD-READ-PAGE"
+    ],
+    "STEP-REQ-3.2-02-01": [
+      "TR-REQ-3.2-OPEN-PAGE",
+      "TR-REQ-3.2-LOAD-READ-PAGE",
+      "TR-REQ-3.2-LOAD-EDIT-PAGE"
+    ]
+  }
+}

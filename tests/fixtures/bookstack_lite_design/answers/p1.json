@@ -1,0 +1,194 @@
+{
+  "entities": {
+    "Book": {
+      "description": "A public book workspace entry created through the UI and persisted across navigation and reload; the Browse Books list shows each book exactly once by its business name.",
+      "fields": {
+        "id": {
+          "description": "Unique identifier for the book.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": true,
+          "unique": true,
+          "references": null,
+          "constraints": []
+        },
+        "title": {
+          "description": "Display title of the book; serves as the business name that uniquely identifies each book entry in the Book list.",
+          "type": "string",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "references": null,
+          "constraints": [
+            "Must be unique across books; each book entry is uniquely identified by its business name."
+          ]
+        },
+        "created_at": {
+          "description": "Timestamp when the book was created.",
+          "type": "datetime",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "description": {
+          "description": "Optional descriptive text recorded as book metadata when the book is created or edited.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "tags": {
+          "description": "Collection of tag labels attached to the book as metadata when the book is created or edited; persisted with the book across reload.",
+          "type": "json",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": [
+            "Stored as a list of tag label strings."
+          ]
+        }
+      }
+    },
+    "Page": {
+      "description": "A page published inside a book; its title and body are saved through the New Page form and it appears exactly once in the parent book's Page list across navigation and reload.",
+      "fields": {
+        "id": {
+          "description": "Unique identifier for the page.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": true,
+          "unique": true,
+          "references": null,
+          "constraints": []
+        },
+        "book_id": {
+          "description": "Identifier of the parent book that owns this page; retained when the page is saved.",
+          "type": "uuid",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": "Book.id",
+          "constraints": []
+        },
+        "title": {
+          "description": "Title entered in the Page title textbox; uniquely identifies the page entry within its parent book, shown as a button or link in the Page list.",
+          "type": "string",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": [
+            "Must be unique within the parent book; a book's Page list shows exactly one entry per page title."
+          ]
+        },
+        "content": {
+          "description": "Text content of the page.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "published": {
+          "description": "Whether the page is published and therefore publicly visible.",
+          "type": "boolean",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "created_at": {
+          "description": "Timestamp when the page was published.",
+          "type": "datetime",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        },
+        "body": {
+          "description": "Page content entered in the 'Write your page content here...' textbox and published with the page.",
+          "type": "string",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "references": null,
+          "constraints": []
+        }
+      }
+    }
+  },
+  "apis": {
+    "API-list-books": {
+      "description": "List all persisted books for the anonymous Browse Books view, with each book represented once by its business name.",
+      "signature": {
+        "name": "listBooks",
+        "method": "GET",
+        "path": "/api/books"
+      }
+    },
+    "API-get-book": {
+      "description": "Return the persisted details of a single book selected from the Browse Books list or reopened for editing, identified by its id: its business name (title) used as the detail heading, its saved description and its saved tags.",
+      "signature": {
+        "name": "getBook",
+        "method": "GET",
+        "path": "/api/books/{id}"
+      }
+    },
+    "API-create-book": {
+      "description": "Create exactly one persisted book from the anonymous Create New Book form and return its saved metadata for the new book detail view.",
+      "signature": {
+        "name": "createBook",
+        "method": "POST",
+        "path": "/api/books"
+      }
+    },
+    "API-update-book": {
+      "description": "Save edited metadata for an existing book selected from the Book list, replacing its business name, description and tags on the same persisted book record.",
+      "signature": {
+        "name": "updateBook",
+        "method": "PUT",
+        "path": "/api/books/{id}"
+      }
+    },
+    "API-delete-book": {
+      "description": "Permanently delete exactly one persisted book selected from the Book list after the user confirms deletion, and return the deleted book's identifying metadata for the Books view.",
+      "signature": {
+        "name": "deleteBook",
+        "method": "DELETE",
+        "path": "/api/books/{id}"
+      }
+    },
+    "API-create-page": {
+      "description": "Publish exactly one page in the specified parent book from the anonymous New Page form, persisting its title and body, retaining the book association, and returning the saved page for the parent book view.",
+      "signature": {
+        "name": "createPage",
+        "method": "POST",
+        "path": "/api/books/{bookId}/pages"
+      }
+    },
+    "API-get-book-pages": {
+      "description": "Return the parent book's persisted business name and its Page list entries, each uniquely identified by title, for reload, post-save navigation, direct reopening of the book, and the anonymous book detail view.",
+      "signature": {
+        "name": "getBookPages",
+        "method": "GET",
+        "path": "/api/books/{bookId}/pages"
+      }
+    },
+    "API-get-page": {
+      "description": "Return one persisted page's saved title heading and body for the anonymous reader view and for reopening the page editor prefilled with the saved title and body; the page is identified by its id and public reading/editing requires no authentication.",
+      "signature": {
+        "name": "getPage",
+        "method": "GET",
+        "path": "/api/pages/{pageId}"
+      }
+    }
+  }
+}

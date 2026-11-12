@@ -1,0 +1,296 @@
+{
+  "elements": {
+    "UI-header": {
+      "type": "container",
+      "parent": "UI-home",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-logo": {
+      "type": "heading",
+      "parent": "UI-header",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "BookStack Demo",
+        "level": 1
+      }
+    },
+    "UI-search": {
+      "type": "input",
+      "parent": "UI-header",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.searchQuery",
+          "dtype": "string",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "placeholder": "Search",
+        "input_type": "search"
+      }
+    },
+    "UI-nav": {
+      "type": "container",
+      "parent": "UI-header",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-nav-shelves": {
+      "type": "link",
+      "parent": "UI-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Shelves",
+        "href": "/shelves"
+      }
+    },
+    "UI-nav-books": {
+      "type": "link",
+      "parent": "UI-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Books",
+        "href": "/books"
+      }
+    },
+    "UI-nav-login": {
+      "type": "link",
+      "parent": "UI-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Login",
+        "href": "/login"
+      }
+    },
+    "UI-workspace": {
+      "type": "container",
+      "parent": "UI-home",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-controls": {
+      "type": "container",
+      "parent": "UI-workspace",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-toggle-details": {
+      "type": "button",
+      "parent": "UI-controls",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.showDetailedInfo",
+          "dtype": "boolean",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "label": "Show / hide detailed information"
+      }
+    },
+    "UI-toggle-dark-mode": {
+      "type": "button",
+      "parent": "UI-controls",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.darkMode",
+          "dtype": "boolean",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "label": "Dark mode"
+      }
+    },
+    "UI-cards": {
+      "type": "container",
+      "parent": "UI-workspace",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-card-recent-books": {
+      "type": "container",
+      "parent": "UI-cards",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-recent-books-heading": {
+      "type": "heading",
+      "parent": "UI-card-recent-books",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Recently Viewed Books",
+        "level": 2
+      }
+    },
+    "UI-recent-books-list": {
+      "type": "list",
+      "parent": "UI-card-recent-books",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "workspace.recentlyViewedBooks",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain id and name strings"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-card-recent-pages": {
+      "type": "container",
+      "parent": "UI-cards",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-recent-pages-heading": {
+      "type": "heading",
+      "parent": "UI-card-recent-pages",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Recently Updated Pages",
+        "level": 2
+      }
+    },
+    "UI-recent-pages-list": {
+      "type": "list",
+      "parent": "UI-card-recent-pages",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "workspace.recentlyUpdatedPages",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain id and title strings"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-recent-pages-view-all": {
+      "type": "link",
+      "parent": "UI-card-recent-pages",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "View all",
+        "href": "/pages"
+      }
+    },
+    "UI-card-recent-activity": {
+      "type": "container",
+      "parent": "UI-cards",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-recent-activity-heading": {
+      "type": "heading",
+      "parent": "UI-card-recent-activity",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Recent Activity",
+        "level": 2
+      }
+    },
+    "UI-recent-activity-list": {
+      "type": "list",
+      "parent": "UI-card-recent-activity",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "workspace.recentActivity",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain actor, action, targetType, targetName and timestampLabel strings"
+          ]
+        }
+      ],
+      "prop": {}
+    }
+  },
+  "pages": {},
+  "requirement_ui": {
+    "REQ-1.1": [
+      "UI-home",
+      "UI-header",
+      "UI-logo",
+      "UI-search",
+      "UI-nav",
+      "UI-nav-shelves",
+      "UI-nav-books",
+      "UI-nav-login",
+      "UI-workspace",
+      "UI-controls",
+      "UI-toggle-details",
+      "UI-toggle-dark-mode",
+      "UI-cards",
+      "UI-card-recent-books",
+      "UI-recent-books-heading",
+      "UI-recent-books-list",
+      "UI-card-recent-pages",
+      "UI-recent-pages-heading",
+      "UI-recent-pages-list",
+      "UI-recent-pages-view-all",
+      "UI-card-recent-activity",
+      "UI-recent-activity-heading",
+      "UI-recent-activity-list"
+    ]
+  },
+  "step_ui": {
+    "STEP-REQ-1.1-01-01": [
+      "UI-home",
+      "UI-header",
+      "UI-nav",
+      "UI-nav-books",
+      "UI-workspace"
+    ]
+  }
+}

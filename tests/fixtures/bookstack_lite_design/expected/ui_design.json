@@ -1,0 +1,1458 @@
+{
+  "pages": {
+    "home": {
+      "name": "Home",
+      "route": "/",
+      "root": "UI-home",
+      "images": [
+        "IMG-INDEX"
+      ]
+    },
+    "books": {
+      "name": "Books",
+      "route": "/books",
+      "root": "UI-books",
+      "images": [
+        "IMG-BOOKS"
+      ]
+    },
+    "book": {
+      "name": "Book",
+      "route": "/books/:id",
+      "root": "UI-book",
+      "images": [
+        "IMG-BOOK",
+        "IMG-DELETE-BOOK"
+      ]
+    },
+    "book_form": {
+      "name": "Create New Book",
+      "route": "/books/create",
+      "root": "UI-book_form",
+      "images": [
+        "IMG-CREATE-BOOK",
+        "IMG-EDIT-BOOK"
+      ]
+    },
+    "book_edit": {
+      "name": "Edit Book",
+      "route": "/books/:id/edit",
+      "root": "UI-book_edit",
+      "images": [
+        "IMG-EDIT-BOOK"
+      ]
+    },
+    "book_delete": {
+      "name": "Delete Book",
+      "route": "/books/:id/delete",
+      "root": "UI-book_delete",
+      "images": [
+        "IMG-DELETE-BOOK"
+      ]
+    },
+    "page_form": {
+      "name": "New Page",
+      "route": "/books/:id/pages/create",
+      "root": "UI-page_form",
+      "images": []
+    },
+    "page_read": {
+      "name": "Page",
+      "route": "/books/:id/pages/:pageId",
+      "root": "UI-page_read",
+      "images": [
+        "IMG-PAGE"
+      ]
+    },
+    "page_edit": {
+      "name": "Edit Page",
+      "route": "/books/:id/pages/:pageId/edit",
+      "root": "UI-page_edit",
+      "images": [
+        "IMG-PAGE"
+      ]
+    }
+  },
+  "elements": {
+    "UI-home": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-header": {
+      "type": "container",
+      "parent": "UI-home",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-logo": {
+      "type": "heading",
+      "parent": "UI-header",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "BookStack Demo",
+        "level": 1
+      }
+    },
+    "UI-search": {
+      "type": "input",
+      "parent": "UI-header",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.searchQuery",
+          "dtype": "string",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "placeholder": "Search",
+        "input_type": "search"
+      }
+    },
+    "UI-nav": {
+      "type": "container",
+      "parent": "UI-header",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-nav-shelves": {
+      "type": "link",
+      "parent": "UI-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Shelves",
+        "href": "/shelves"
+      }
+    },
+    "UI-nav-books": {
+      "type": "link",
+      "parent": "UI-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Books",
+        "href": "/books"
+      }
+    },
+    "UI-nav-login": {
+      "type": "link",
+      "parent": "UI-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Login",
+        "href": "/login"
+      }
+    },
+    "UI-workspace": {
+      "type": "container",
+      "parent": "UI-home",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-controls": {
+      "type": "container",
+      "parent": "UI-workspace",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-toggle-details": {
+      "type": "button",
+      "parent": "UI-controls",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.showDetailedInfo",
+          "dtype": "boolean",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "label": "Show / hide detailed information"
+      }
+    },
+    "UI-toggle-dark-mode": {
+      "type": "button",
+      "parent": "UI-controls",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.darkMode",
+          "dtype": "boolean",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "label": "Dark mode"
+      }
+    },
+    "UI-cards": {
+      "type": "container",
+      "parent": "UI-workspace",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-card-recent-books": {
+      "type": "container",
+      "parent": "UI-cards",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-recent-books-heading": {
+      "type": "heading",
+      "parent": "UI-card-recent-books",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Recently Viewed Books",
+        "level": 2
+      }
+    },
+    "UI-recent-books-list": {
+      "type": "list",
+      "parent": "UI-card-recent-books",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "workspace.recentlyViewedBooks",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain id and name strings"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-card-recent-pages": {
+      "type": "container",
+      "parent": "UI-cards",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-recent-pages-heading": {
+      "type": "heading",
+      "parent": "UI-card-recent-pages",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Recently Updated Pages",
+        "level": 2
+      }
+    },
+    "UI-recent-pages-list": {
+      "type": "list",
+      "parent": "UI-card-recent-pages",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "workspace.recentlyUpdatedPages",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain id and title strings"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-recent-pages-view-all": {
+      "type": "link",
+      "parent": "UI-card-recent-pages",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "View all",
+        "href": "/pages"
+      }
+    },
+    "UI-card-recent-activity": {
+      "type": "container",
+      "parent": "UI-cards",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-recent-activity-heading": {
+      "type": "heading",
+      "parent": "UI-card-recent-activity",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Recent Activity",
+        "level": 2
+      }
+    },
+    "UI-recent-activity-list": {
+      "type": "list",
+      "parent": "UI-card-recent-activity",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "workspace.recentActivity",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain actor, action, targetType, targetName and timestampLabel strings"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-books": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-books-header": {
+      "type": "container",
+      "parent": "UI-books",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-books-logo": {
+      "type": "heading",
+      "parent": "UI-books-header",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "BookStack Demo",
+        "level": 1
+      }
+    },
+    "UI-books-search": {
+      "type": "input",
+      "parent": "UI-books-header",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "workspace.searchQuery",
+          "dtype": "string",
+          "constraints": []
+        }
+      ],
+      "prop": {
+        "placeholder": "Search",
+        "input_type": "search"
+      }
+    },
+    "UI-books-nav": {
+      "type": "container",
+      "parent": "UI-books-header",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-books-nav-shelves": {
+      "type": "link",
+      "parent": "UI-books-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Shelves",
+        "href": "/shelves"
+      }
+    },
+    "UI-books-nav-books": {
+      "type": "link",
+      "parent": "UI-books-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Books",
+        "href": "/books"
+      }
+    },
+    "UI-books-nav-settings": {
+      "type": "link",
+      "parent": "UI-books-nav",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Settings",
+        "href": "/settings"
+      }
+    },
+    "UI-books-main": {
+      "type": "container",
+      "parent": "UI-books",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-books-heading": {
+      "type": "heading",
+      "parent": "UI-books-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Books",
+        "level": 2
+      }
+    },
+    "UI-books-sort-select": {
+      "type": "select",
+      "parent": "UI-books-main",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "books.sortOption",
+          "dtype": "string",
+          "constraints": [
+            "Selected sort option for the book list"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Sort",
+        "options": [
+          "Name"
+        ]
+      }
+    },
+    "UI-books-list-region": {
+      "type": "container",
+      "parent": "UI-books-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Book list"
+      }
+    },
+    "UI-books-list-heading": {
+      "type": "heading",
+      "parent": "UI-books-list-region",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Book list",
+        "level": 3
+      }
+    },
+    "UI-books-list": {
+      "type": "list",
+      "parent": "UI-books-list-region",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "books.items",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain id and name strings",
+            "Each book appears exactly once in the list",
+            "Each entry is rendered as a keyboard-accessible button whose accessible name is the book's business name; an equivalent link is allowed"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-book": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-main": {
+      "type": "container",
+      "parent": "UI-book",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-breadcrumb-books": {
+      "type": "link",
+      "parent": "UI-book-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Books",
+        "href": "/books"
+      }
+    },
+    "UI-book-heading": {
+      "type": "heading",
+      "parent": "UI-book-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "book.name",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved business name of the opened book"
+          ]
+        }
+      ],
+      "prop": {
+        "level": 1
+      }
+    },
+    "UI-book-description": {
+      "type": "text",
+      "parent": "UI-book-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "book.description",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved description of the opened book"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-books-actions": {
+      "type": "container",
+      "parent": "UI-books",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-books-create-book": {
+      "type": "link",
+      "parent": "UI-books-actions",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Create New Book",
+        "href": "/books/create"
+      }
+    },
+    "UI-book-actions": {
+      "type": "container",
+      "parent": "UI-book",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-edit-link": {
+      "type": "link",
+      "parent": "UI-book-actions",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Edit",
+        "href": "/books/:id/edit"
+      }
+    },
+    "UI-book_form": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-form-heading": {
+      "type": "heading",
+      "parent": "UI-book_form",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Create New Book",
+        "level": 1
+      }
+    },
+    "UI-book-form": {
+      "type": "form",
+      "parent": "UI-book_form",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-form-name": {
+      "type": "input",
+      "parent": "UI-book-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftBook.name",
+          "dtype": "string",
+          "constraints": [
+            "Pending book name entered by the user"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Name",
+        "input_type": "text"
+      }
+    },
+    "UI-book-form-description": {
+      "type": "input",
+      "parent": "UI-book-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftBook.description",
+          "dtype": "string",
+          "constraints": [
+            "Pending book description entered by the user"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Description",
+        "input_type": "textarea"
+      }
+    },
+    "UI-book-form-tags": {
+      "type": "input",
+      "parent": "UI-book-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftBook.tags",
+          "dtype": "string",
+          "constraints": [
+            "Comma-separated tag labels entered by the user",
+            "Tag labels are trimmed and empty labels are ignored"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Tags",
+        "input_type": "text"
+      }
+    },
+    "UI-book-form-cancel": {
+      "type": "button",
+      "parent": "UI-book-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Cancel"
+      }
+    },
+    "UI-book-form-save": {
+      "type": "button",
+      "parent": "UI-book-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Save Book"
+      }
+    },
+    "UI-book_edit": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-edit-heading": {
+      "type": "heading",
+      "parent": "UI-book_edit",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Edit Book",
+        "level": 1
+      }
+    },
+    "UI-book-edit-form": {
+      "type": "form",
+      "parent": "UI-book_edit",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-edit-name": {
+      "type": "input",
+      "parent": "UI-book-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftBook.name",
+          "dtype": "string",
+          "constraints": [
+            "Pending replacement name; prefilled from the opened book's saved name when Edit opens"
+          ]
+        },
+        {
+          "var": "book.name",
+          "dtype": "string",
+          "constraints": [
+            "Saved business name of the opened book"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Name",
+        "input_type": "text"
+      }
+    },
+    "UI-book-edit-description": {
+      "type": "input",
+      "parent": "UI-book-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftBook.description",
+          "dtype": "string",
+          "constraints": [
+            "Pending replacement description; prefilled from the opened book's saved description when Edit opens"
+          ]
+        },
+        {
+          "var": "book.description",
+          "dtype": "string",
+          "constraints": [
+            "Saved description of the opened book"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Description",
+        "input_type": "textarea"
+      }
+    },
+    "UI-book-edit-tags": {
+      "type": "input",
+      "parent": "UI-book-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftBook.tags",
+          "dtype": "string",
+          "constraints": [
+            "Pending comma-separated tag labels; prefilled from the opened book's saved tags when Edit opens"
+          ]
+        },
+        {
+          "var": "book.tags",
+          "dtype": "string",
+          "constraints": [
+            "Saved comma-separated tag labels of the opened book"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Tags",
+        "input_type": "text"
+      }
+    },
+    "UI-book-edit-cancel": {
+      "type": "button",
+      "parent": "UI-book-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Cancel"
+      }
+    },
+    "UI-book-edit-save": {
+      "type": "button",
+      "parent": "UI-book-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Save Book"
+      }
+    },
+    "UI-book-delete-button": {
+      "type": "button",
+      "parent": "UI-book-actions",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Delete"
+      }
+    },
+    "UI-book_delete": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-delete-main": {
+      "type": "container",
+      "parent": "UI-book_delete",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-book-delete-heading": {
+      "type": "heading",
+      "parent": "UI-book-delete-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Delete Book",
+        "level": 1
+      }
+    },
+    "UI-book-delete-message": {
+      "type": "text",
+      "parent": "UI-book-delete-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "book.name",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved business name of the opened book"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-book-delete-warning": {
+      "type": "text",
+      "parent": "UI-book-delete-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Are you sure you want to delete this book?"
+      }
+    },
+    "UI-book-delete-cancel": {
+      "type": "button",
+      "parent": "UI-book-delete-main",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Cancel"
+      }
+    },
+    "UI-book-delete-confirm": {
+      "type": "button",
+      "parent": "UI-book-delete-main",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Confirm Delete"
+      }
+    },
+    "UI-page_form": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-form-heading": {
+      "type": "heading",
+      "parent": "UI-page_form",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "New Page",
+        "level": 1
+      }
+    },
+    "UI-page-form": {
+      "type": "form",
+      "parent": "UI-page_form",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-form-title": {
+      "type": "input",
+      "parent": "UI-page-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.title",
+          "dtype": "string",
+          "constraints": [
+            "Page title entered by the user; used as the page's unique identifier within the parent book"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Page title",
+        "placeholder": "Page title",
+        "input_type": "text"
+      }
+    },
+    "UI-page-form-content": {
+      "type": "input",
+      "parent": "UI-page-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.content",
+          "dtype": "string",
+          "constraints": [
+            "Page body content entered by the user"
+          ]
+        }
+      ],
+      "prop": {
+        "placeholder": "Write your page content here...",
+        "input_type": "textarea"
+      }
+    },
+    "UI-page-form-save": {
+      "type": "button",
+      "parent": "UI-page-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Save Page"
+      }
+    },
+    "UI-book-new-page": {
+      "type": "link",
+      "parent": "UI-book-actions",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "New Page",
+        "href": "/books/:id/pages/create"
+      }
+    },
+    "UI-book-page-list": {
+      "type": "list",
+      "parent": "UI-book-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "book.pages",
+          "dtype": "array",
+          "constraints": [
+            "Entries contain id and title strings for pages belonging to the opened book",
+            "Each saved page appears exactly once in the list",
+            "Entries are uniquely identified by title and shown using a button or link"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Page list"
+      }
+    },
+    "UI-page_read": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-read-main": {
+      "type": "container",
+      "parent": "UI-page_read",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-read-heading": {
+      "type": "heading",
+      "parent": "UI-page-read-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "page.title",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved title of the opened page"
+          ]
+        }
+      ],
+      "prop": {
+        "level": 1
+      }
+    },
+    "UI-page-read-body": {
+      "type": "text",
+      "parent": "UI-page-read-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "page.content",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved body content of the opened page"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-page-read-actions": {
+      "type": "container",
+      "parent": "UI-page_read",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-read-edit-link": {
+      "type": "link",
+      "parent": "UI-page-read-actions",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Edit",
+        "href": "/books/:id/pages/:pageId/edit"
+      }
+    },
+    "UI-page_edit": {
+      "type": "page",
+      "parent": null,
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-edit-heading": {
+      "type": "heading",
+      "parent": "UI-page_edit",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Edit Page",
+        "level": 1
+      }
+    },
+    "UI-page-edit-form": {
+      "type": "form",
+      "parent": "UI-page_edit",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-edit-title": {
+      "type": "input",
+      "parent": "UI-page-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.title",
+          "dtype": "string",
+          "constraints": [
+            "Pending page title; when Edit opens, prefilled from the opened page's saved title"
+          ]
+        },
+        {
+          "var": "page.title",
+          "dtype": "string",
+          "constraints": [
+            "Saved title of the opened page"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Page title",
+        "placeholder": "Page title",
+        "input_type": "text"
+      }
+    },
+    "UI-page-edit-content": {
+      "type": "input",
+      "parent": "UI-page-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.content",
+          "dtype": "string",
+          "constraints": [
+            "Pending page body content; when Edit opens, prefilled from the opened page's saved body"
+          ]
+        },
+        {
+          "var": "page.content",
+          "dtype": "string",
+          "constraints": [
+            "Saved body content of the opened page"
+          ]
+        }
+      ],
+      "prop": {
+        "placeholder": "Write your page content here...",
+        "input_type": "textarea"
+      }
+    },
+    "UI-page-edit-save": {
+      "type": "button",
+      "parent": "UI-page-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Save Page"
+      }
+    }
+  },
+  "requirements": {
+    "ROOT": [],
+    "REQ-1": [],
+    "REQ-2": [],
+    "REQ-3": [],
+    "REQ-1.1": [
+      "UI-home",
+      "UI-header",
+      "UI-logo",
+      "UI-search",
+      "UI-nav",
+      "UI-nav-shelves",
+      "UI-nav-books",
+      "UI-nav-login",
+      "UI-workspace",
+      "UI-controls",
+      "UI-toggle-details",
+      "UI-toggle-dark-mode",
+      "UI-cards",
+      "UI-card-recent-books",
+      "UI-recent-books-heading",
+      "UI-recent-books-list",
+      "UI-card-recent-pages",
+      "UI-recent-pages-heading",
+      "UI-recent-pages-list",
+      "UI-recent-pages-view-all",
+      "UI-card-recent-activity",
+      "UI-recent-activity-heading",
+      "UI-recent-activity-list"
+    ],
+    "REQ-2.1": [
+      "UI-nav-books",
+      "UI-books",
+      "UI-books-list-region",
+      "UI-books-list-heading",
+      "UI-books-list",
+      "UI-home"
+    ],
+    "REQ-2.2": [
+      "UI-books",
+      "UI-books-list-region",
+      "UI-books-list-heading",
+      "UI-books-list",
+      "UI-book",
+      "UI-book-main",
+      "UI-book-breadcrumb-books",
+      "UI-book-heading",
+      "UI-book-description"
+    ],
+    "REQ-2.3": [
+      "UI-books",
+      "UI-books-nav-books",
+      "UI-books-main",
+      "UI-books-list-region",
+      "UI-books-list",
+      "UI-books-actions",
+      "UI-books-create-book",
+      "UI-book_form",
+      "UI-book-form-heading",
+      "UI-book-form",
+      "UI-book-form-name",
+      "UI-book-form-description",
+      "UI-book-form-tags",
+      "UI-book-form-cancel",
+      "UI-book-form-save",
+      "UI-book",
+      "UI-book-main",
+      "UI-book-heading",
+      "UI-book-description",
+      "UI-book-actions",
+      "UI-book-edit-link",
+      "UI-book_edit",
+      "UI-book-edit-heading",
+      "UI-book-edit-form",
+      "UI-book-edit-name",
+      "UI-book-edit-description",
+      "UI-book-edit-tags"
+    ],
+    "REQ-2.4": [
+      "UI-book",
+      "UI-book-main",
+      "UI-book-heading",
+      "UI-book-description",
+      "UI-book-actions",
+      "UI-book-edit-link",
+      "UI-book_edit",
+      "UI-book-edit-heading",
+      "UI-book-edit-form",
+      "UI-book-edit-name",
+      "UI-book-edit-description",
+      "UI-book-edit-tags",
+      "UI-book-edit-cancel",
+      "UI-book-edit-save",
+      "UI-book_form"
+    ],
+    "REQ-2.5": [
+      "UI-book-delete-button",
+      "UI-book_delete",
+      "UI-book-delete-heading",
+      "UI-book-delete-message",
+      "UI-book-delete-warning",
+      "UI-book-delete-cancel",
+      "UI-book-delete-confirm",
+      "UI-books-list-region",
+      "UI-books-list",
+      "UI-book-heading",
+      "UI-book-description",
+      "UI-books",
+      "UI-book"
+    ],
+    "REQ-3.1": [
+      "UI-book",
+      "UI-book-main",
+      "UI-book-actions",
+      "UI-book-new-page",
+      "UI-book-page-list",
+      "UI-page_form",
+      "UI-page-form-heading",
+      "UI-page-form",
+      "UI-page-form-title",
+      "UI-page-form-content",
+      "UI-page-form-save"
+    ],
+    "REQ-3.2": [
+      "UI-book-page-list",
+      "UI-page-read-heading",
+      "UI-page-read-body",
+      "UI-page-read-edit-link",
+      "UI-page-edit-title",
+      "UI-page-edit-content",
+      "UI-page-edit-save",
+      "UI-book"
+    ]
+  },
+  "steps": {
+    "STEP-REQ-1.1-01-01": [
+      "UI-home",
+      "UI-header",
+      "UI-nav",
+      "UI-nav-books",
+      "UI-workspace"
+    ],
+    "STEP-REQ-2.1-01-01": [
+      "UI-nav-books",
+      "UI-books",
+      "UI-books-list-region",
+      "UI-books-list-heading",
+      "UI-books-list"
+    ],
+    "STEP-REQ-2.2-01-01": [
+      "UI-books-list",
+      "UI-book-heading",
+      "UI-book-description"
+    ],
+    "STEP-REQ-2.3-01-01": [
+      "UI-books-nav-books",
+      "UI-books",
+      "UI-books-list-region",
+      "UI-books-list",
+      "UI-books-actions",
+      "UI-books-create-book",
+      "UI-book_form",
+      "UI-book-form-heading",
+      "UI-book-form-name",
+      "UI-book-form-description",
+      "UI-book-form-tags",
+      "UI-book-form-save",
+      "UI-book",
+      "UI-book-heading",
+      "UI-book-description",
+      "UI-book-actions",
+      "UI-book-edit-link",
+      "UI-book_edit",
+      "UI-book-edit-name",
+      "UI-book-edit-description",
+      "UI-book-edit-tags"
+    ],
+    "STEP-REQ-2.3-02-01": [
+      "UI-books",
+      "UI-books-list-region",
+      "UI-books-list",
+      "UI-books-actions",
+      "UI-books-create-book",
+      "UI-book_form",
+      "UI-book-form-heading",
+      "UI-book-form-name",
+      "UI-book-form-description",
+      "UI-book-form-tags",
+      "UI-book-form-cancel"
+    ],
+    "STEP-REQ-2.4-01-01": [
+      "UI-book",
+      "UI-book-heading",
+      "UI-book-description",
+      "UI-book-actions",
+      "UI-book-edit-link",
+      "UI-book_edit",
+      "UI-book-edit-heading",
+      "UI-book-edit-form",
+      "UI-book-edit-name",
+      "UI-book-edit-description",
+      "UI-book-edit-tags",
+      "UI-book-edit-save"
+    ],
+    "STEP-REQ-2.4-02-01": [
+      "UI-book",
+      "UI-book-heading",
+      "UI-book-description",
+      "UI-book-edit-link",
+      "UI-book_edit",
+      "UI-book-edit-form",
+      "UI-book-edit-name",
+      "UI-book-edit-description",
+      "UI-book-edit-tags",
+      "UI-book-edit-cancel"
+    ],
+    "STEP-REQ-2.5-01-01": [
+      "UI-book-delete-button",
+      "UI-book-delete-confirm",
+      "UI-book-delete-cancel",
+      "UI-books-list-region",
+      "UI-books-list"
+    ],
+    "STEP-REQ-2.5-02-01": [
+      "UI-book-delete-button",
+      "UI-book-delete-cancel",
+      "UI-book-heading",
+      "UI-book-description"
+    ],
+    "STEP-REQ-3.1-01-01": [
+      "UI-book",
+      "UI-book-new-page",
+      "UI-page_form",
+      "UI-page-form-title",
+      "UI-page-form-content",
+      "UI-page-form-save",
+      "UI-book-page-list"
+    ],
+    "STEP-REQ-3.2-01-01": [
+      "UI-book-page-list",
+      "UI-page-read-heading",
+      "UI-page-read-body"
+    ],
+    "STEP-REQ-3.2-02-01": [
+      "UI-book-page-list",
+      "UI-page-read-edit-link",
+      "UI-page-edit-title",
+      "UI-page-edit-content",
+      "UI-page-edit-save"
+    ]
+  }
+}

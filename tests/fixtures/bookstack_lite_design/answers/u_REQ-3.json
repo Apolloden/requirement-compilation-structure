@@ -1,0 +1,271 @@
+{
+  "elements": {
+    "UI-page-form-heading": {
+      "type": "heading",
+      "parent": "UI-page_form",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "New Page",
+        "level": 1
+      }
+    },
+    "UI-page-form": {
+      "type": "form",
+      "parent": "UI-page_form",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-form-title": {
+      "type": "input",
+      "parent": "UI-page-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.title",
+          "dtype": "string",
+          "constraints": [
+            "Page title entered by the user; used as the page's unique identifier within the parent book"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Page title",
+        "placeholder": "Page title",
+        "input_type": "text"
+      }
+    },
+    "UI-page-form-content": {
+      "type": "input",
+      "parent": "UI-page-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.content",
+          "dtype": "string",
+          "constraints": [
+            "Page body content entered by the user"
+          ]
+        }
+      ],
+      "prop": {
+        "placeholder": "Write your page content here...",
+        "input_type": "textarea"
+      }
+    },
+    "UI-page-form-save": {
+      "type": "button",
+      "parent": "UI-page-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Save Page"
+      }
+    },
+    "UI-page-read-main": {
+      "type": "container",
+      "parent": "UI-page_read",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-read-heading": {
+      "type": "heading",
+      "parent": "UI-page-read-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "page.title",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved title of the opened page"
+          ]
+        }
+      ],
+      "prop": {
+        "level": 1
+      }
+    },
+    "UI-page-read-body": {
+      "type": "text",
+      "parent": "UI-page-read-main",
+      "mode": [
+        "user_read"
+      ],
+      "data": [
+        {
+          "var": "page.content",
+          "dtype": "string",
+          "constraints": [
+            "Text is the saved body content of the opened page"
+          ]
+        }
+      ],
+      "prop": {}
+    },
+    "UI-page-read-actions": {
+      "type": "container",
+      "parent": "UI-page_read",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-read-edit-link": {
+      "type": "link",
+      "parent": "UI-page-read-actions",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Edit",
+        "href": "/books/:id/pages/:pageId/edit"
+      }
+    },
+    "UI-page-edit-heading": {
+      "type": "heading",
+      "parent": "UI-page_edit",
+      "mode": [
+        "user_read"
+      ],
+      "data": [],
+      "prop": {
+        "text": "Edit Page",
+        "level": 1
+      }
+    },
+    "UI-page-edit-form": {
+      "type": "form",
+      "parent": "UI-page_edit",
+      "mode": [],
+      "data": [],
+      "prop": {}
+    },
+    "UI-page-edit-title": {
+      "type": "input",
+      "parent": "UI-page-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.title",
+          "dtype": "string",
+          "constraints": [
+            "Pending page title; when Edit opens, prefilled from the opened page's saved title"
+          ]
+        },
+        {
+          "var": "page.title",
+          "dtype": "string",
+          "constraints": [
+            "Saved title of the opened page"
+          ]
+        }
+      ],
+      "prop": {
+        "label": "Page title",
+        "placeholder": "Page title",
+        "input_type": "text"
+      }
+    },
+    "UI-page-edit-content": {
+      "type": "input",
+      "parent": "UI-page-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [
+        {
+          "var": "draftPage.content",
+          "dtype": "string",
+          "constraints": [
+            "Pending page body content; when Edit opens, prefilled from the opened page's saved body"
+          ]
+        },
+        {
+          "var": "page.content",
+          "dtype": "string",
+          "constraints": [
+            "Saved body content of the opened page"
+          ]
+        }
+      ],
+      "prop": {
+        "placeholder": "Write your page content here...",
+        "input_type": "textarea"
+      }
+    },
+    "UI-page-edit-save": {
+      "type": "button",
+      "parent": "UI-page-edit-form",
+      "mode": [
+        "user_write"
+      ],
+      "data": [],
+      "prop": {
+        "label": "Save Page"
+      }
+    }
+  },
+  "pages": {},
+  "requirement_ui": {
+    "REQ-3.1": [
+      "UI-book",
+      "UI-book-main",
+      "UI-book-actions",
+      "UI-book-new-page",
+      "UI-book-page-list",
+      "UI-page_form",
+      "UI-page-form-heading",
+      "UI-page-form",
+      "UI-page-form-title",
+      "UI-page-form-content",
+      "UI-page-form-save"
+    ],
+    "REQ-3.2": [
+      "UI-book-page-list",
+      "UI-page-read-heading",
+      "UI-page-read-body",
+      "UI-page-read-edit-link",
+      "UI-page-edit-title",
+      "UI-page-edit-content",
+      "UI-page-edit-save",
+      "UI-book"
+    ]
+  },
+  "step_ui": {
+    "STEP-REQ-3.1-01-01": [
+      "UI-book",
+      "UI-book-new-page",
+      "UI-page_form",
+      "UI-page-form-title",
+      "UI-page-form-content",
+      "UI-page-form-save",
+      "UI-book-page-list"
+    ],
+    "STEP-REQ-3.2-01-01": [
+      "UI-book-page-list",
+      "UI-page-read-heading",
+      "UI-page-read-body"
+    ],
+    "STEP-REQ-3.2-02-01": [
+      "UI-book-page-list",
+      "UI-page-read-edit-link",
+      "UI-page-edit-title",
+      "UI-page-edit-content",
+      "UI-page-edit-save"
+    ]
+  }
+}

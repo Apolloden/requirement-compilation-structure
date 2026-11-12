@@ -1,0 +1,514 @@
+{
+  "requirement_fields": {
+    "REQ-3.1": [
+      "Book.id",
+      "Book.title",
+      "Page.body",
+      "Page.book_id",
+      "Page.created_at",
+      "Page.id",
+      "Page.title"
+    ],
+    "REQ-3.2": [
+      "Page.body",
+      "Page.book_id",
+      "Page.id",
+      "Page.published",
+      "Page.title"
+    ]
+  },
+  "obligations": {
+    "requirements": {
+      "REQ-3.1": {
+        "read": [
+          "Book.id",
+          "Book.title",
+          "Page.book_id",
+          "Page.id",
+          "Page.title"
+        ],
+        "write": [
+          "Page.body",
+          "Page.book_id",
+          "Page.created_at",
+          "Page.id",
+          "Page.title"
+        ]
+      },
+      "REQ-3.2": {
+        "read": [
+          "Page.body",
+          "Page.book_id",
+          "Page.id",
+          "Page.published",
+          "Page.title"
+        ],
+        "write": []
+      }
+    },
+    "steps": {
+      "STEP-REQ-3.1-01-01": {
+        "read": [
+          "Book.id",
+          "Book.title",
+          "Page.book_id",
+          "Page.id",
+          "Page.title"
+        ],
+        "write": [
+          "Page.body",
+          "Page.book_id",
+          "Page.created_at",
+          "Page.id",
+          "Page.title"
+        ]
+      },
+      "STEP-REQ-3.2-01-01": {
+        "read": [
+          "Page.body",
+          "Page.book_id",
+          "Page.id",
+          "Page.published",
+          "Page.title"
+        ],
+        "write": []
+      },
+      "STEP-REQ-3.2-02-01": {
+        "read": [
+          "Page.body",
+          "Page.book_id",
+          "Page.id",
+          "Page.published",
+          "Page.title"
+        ],
+        "write": []
+      }
+    }
+  },
+  "apis": {
+    "API-create-page": {
+      "description": "Publish exactly one page in the specified parent book from the anonymous New Page form, persisting its title and body, retaining the book association, and returning the saved page for the parent book view.",
+      "read": [
+        "Book.id",
+        "Page.title"
+      ],
+      "write": [
+        "Page.id",
+        "Page.book_id",
+        "Page.title",
+        "Page.body",
+        "Page.created_at"
+      ],
+      "signature": {
+        "name": "createPage",
+        "method": "POST",
+        "path": "/api/books/{bookId}/pages"
+      },
+      "request": {
+        "params": {
+          "type": "object",
+          "properties": {
+            "bookId": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the parent book that will own the new page."
+            }
+          },
+          "required": [
+            "bookId"
+          ]
+        },
+        "query": {
+          "type": "object"
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Page title entered in the Page title textbox; must be unique within the parent book."
+            },
+            "body": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Page content entered in the 'Write your page content here...' textbox; null when no content is provided."
+            }
+          },
+          "required": [
+            "title",
+            "body"
+          ]
+        },
+        "headers": {
+          "type": "object"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 201,
+          "body": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "book_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string",
+                "description": "Saved page title shown as the Page list entry."
+              },
+              "body": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Saved page content; null when no content was provided."
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "book_id",
+              "title",
+              "body",
+              "created_at"
+            ]
+          },
+          "headers": {
+            "type": "object"
+          }
+        },
+        "errors": [
+          {
+            "status": 404,
+            "body": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error"
+              ]
+            },
+            "headers": {
+              "type": "object"
+            }
+          },
+          {
+            "status": 409,
+            "body": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error"
+              ]
+            },
+            "headers": {
+              "type": "object"
+            }
+          }
+        ]
+      },
+      "precondition": [
+        {
+          "id": "P-create-page-book-exists",
+          "description": "A persisted book with the requested bookId exists",
+          "error_status": 404
+        },
+        {
+          "id": "P-create-page-title-unique-in-book",
+          "description": "No persisted page in the same parent book already has the submitted title",
+          "error_status": 409
+        }
+      ],
+      "postcondition": [
+        {
+          "id": "Q-create-page",
+          "description": "Persist exactly one page with a generated id and created_at, the requested book_id as parent, and the submitted title and body, then return its saved fields; the page appears exactly once in the parent book's Page list",
+          "status": 201
+        },
+        {
+          "id": "Q-create-page-book-missing",
+          "description": "When no book matches bookId, return 404 and leave all book and page records unchanged",
+          "status": 404
+        },
+        {
+          "id": "Q-create-page-duplicate-title",
+          "description": "When a page with the submitted title already exists in the parent book, return 409 and leave all book and page records unchanged",
+          "status": 409
+        }
+      ]
+    },
+    "API-get-book-pages": {
+      "description": "Return the parent book's persisted business name and its Page list entries, each uniquely identified by title, for reload, post-save navigation, direct reopening of the book, and the anonymous book detail view.",
+      "read": [
+        "Book.id",
+        "Book.title",
+        "Page.book_id",
+        "Page.id",
+        "Page.title"
+      ],
+      "write": [],
+      "signature": {
+        "name": "getBookPages",
+        "method": "GET",
+        "path": "/api/books/{bookId}/pages"
+      },
+      "request": {
+        "params": {
+          "type": "object",
+          "properties": {
+            "bookId": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the book whose Page list is being viewed."
+            }
+          },
+          "required": [
+            "bookId"
+          ]
+        },
+        "query": {
+          "type": "object"
+        },
+        "body": {
+          "type": "object"
+        },
+        "headers": {
+          "type": "object"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 200,
+          "body": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string",
+                "description": "Parent book business name shown as the book heading."
+              },
+              "pages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "Page title shown as the Page list entry button or link text."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "pages"
+            ]
+          },
+          "headers": {
+            "type": "object"
+          }
+        },
+        "errors": [
+          {
+            "status": 404,
+            "body": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error"
+              ]
+            },
+            "headers": {
+              "type": "object"
+            }
+          }
+        ]
+      },
+      "precondition": [
+        {
+          "id": "P-get-book-pages-book-exists",
+          "description": "A persisted book with the requested bookId exists",
+          "error_status": 404
+        }
+      ],
+      "postcondition": [
+        {
+          "id": "Q-get-book-pages",
+          "description": "Return the parent book's id and title plus every persisted page in that book exactly once as id/title entries, without changing any stored record",
+          "status": 200
+        },
+        {
+          "id": "Q-get-book-pages-missing",
+          "description": "When no book matches bookId, return 404 and leave all book and page records unchanged",
+          "status": 404
+        }
+      ]
+    },
+    "API-get-page": {
+      "description": "Return one persisted page's saved title heading and body for the anonymous reader view and for reopening the page editor prefilled with the saved title and body; the page is identified by its id and public reading/editing requires no authentication.",
+      "read": [
+        "Page.id",
+        "Page.book_id",
+        "Page.title",
+        "Page.body",
+        "Page.published"
+      ],
+      "write": [],
+      "signature": {
+        "name": "getPage",
+        "method": "GET",
+        "path": "/api/pages/{pageId}"
+      },
+      "request": {
+        "params": {
+          "type": "object",
+          "properties": {
+            "pageId": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the page selected from the parent book's Page list."
+            }
+          },
+          "required": [
+            "pageId"
+          ]
+        },
+        "query": {
+          "type": "object"
+        },
+        "body": {
+          "type": "object"
+        },
+        "headers": {
+          "type": "object"
+        }
+      },
+      "response": {
+        "success": {
+          "status": 200,
+          "body": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "book_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Identifier of the parent book that owns the page."
+              },
+              "title": {
+                "type": "string",
+                "description": "Saved page title shown as the page heading and prefilled in the Page title field when editing."
+              },
+              "body": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Saved page content shown in the page body and prefilled in the 'Write your page content here...' field; null when no content was saved."
+              },
+              "published": {
+                "type": "boolean",
+                "description": "Whether the page is published and therefore publicly visible."
+              }
+            },
+            "required": [
+              "id",
+              "book_id",
+              "title",
+              "body",
+              "published"
+            ]
+          },
+          "headers": {
+            "type": "object"
+          }
+        },
+        "errors": [
+          {
+            "status": 404,
+            "body": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error"
+              ]
+            },
+            "headers": {
+              "type": "object"
+            }
+          }
+        ]
+      },
+      "precondition": [
+        {
+          "id": "P-get-page-exists",
+          "description": "A persisted page with the requested pageId exists",
+          "error_status": 404
+        }
+      ],
+      "postcondition": [
+        {
+          "id": "Q-get-page",
+          "description": "Return the saved id, parent book_id, title, body and published flag for the requested page without changing any stored record; the returned title and body are the values used for reading the page and prefilling the reopened editor",
+          "status": 200
+        },
+        {
+          "id": "Q-get-page-missing",
+          "description": "When no page matches pageId, return 404 and leave all page records unchanged",
+          "status": 404
+        }
+      ]
+    }
+  },
+  "requirement_apis": {
+    "REQ-3.1": [
+      "API-create-page",
+      "API-get-book-pages"
+    ],
+    "REQ-3.2": [
+      "API-get-page",
+      "API-get-book-pages"
+    ]
+  }
+}
