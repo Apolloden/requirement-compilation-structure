@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from arcflash import proc
+from arcflash import config, proc
 from arcflash.workspace import TEMPLATE, Workspace, WorkspaceError
 from tests.support import FIXTURES
 
@@ -136,6 +136,13 @@ class WorkspaceTests(unittest.TestCase):
             data = json.loads(path.read_text())
             for name, version in {**data.get("dependencies", {}), **data.get("devDependencies", {})}.items():
                 self.assertRegex(version, r"^\d+\.\d+\.\d+$", f"{path}: {name}")
+
+    def test_harness_uses_the_runner_playwright_version(self):
+        # The ARC-Bench runner ships Playwright 1.57.0 with its Chromium ready (preflight.json of a downloaded run),
+        # so the harness uses that version and needs no browser download there.
+        harness = json.loads((TEMPLATE / "harness" / "package.json").read_text())
+        self.assertEqual(harness["devDependencies"]["@playwright/test"], config.PLAYWRIGHT_VERSION)
+        self.assertEqual(config.PLAYWRIGHT_VERSION, "1.57.0")
 
     def test_local_env_bypasses_proxies(self):
         env = proc.local_env()

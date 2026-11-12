@@ -14,6 +14,7 @@ EXPRESSION = re.compile(r"[\w$.]+")
 PLUS = re.compile(r"\s*\+\s*")
 DIALOG_CALL = re.compile(r"\bwindow\.(alert|confirm|prompt)\s*\(|(?<![\w$.])(?<!function )(alert|confirm|prompt)\s*\(")
 BAD_INPUT = re.compile(r"\btype\s*=\s*\{?\s*[\"'`](date|number)[\"'`]")
+CONTROL_TAGS = {"link": "Link|NavLink|a", "button": "button"}   # JSX tags that render a layout link or button
 IMPORT = re.compile(r"""\bimport\s+(?:[\w$*{}\s,]+?\s+from\s+)?["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)|\brequire\(\s*["']([^"']+)["']\s*\)""")
 
 
@@ -154,6 +155,17 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
         name = str(control.get("name", ""))
         if name.strip() and not _name_present(name, sources):
             issues.append(f'{control.get("role")} "{name}" ({where}) does not appear in the frontend code')
+
+    # 8b: a layout link or button repeated inside a page file (the layout already shows it on every page)
+    layout_modules = sorted({f"frontend/src/pages/{p.get('module')}.jsx" for p in pages if p.get("layout")})
+    for control in layout.get("controls", []):
+        if not isinstance(control, dict) or control.get("role") not in CONTROL_TAGS or not str(control.get("name", "")).strip():
+            continue
+        name = str(control["name"]).strip()
+        tag = re.compile(rf"<({CONTROL_TAGS[control['role']]})\b(?:=>|[^>])*>\s*{re.escape(name)}\s*</\1>")
+        for key in layout_modules:
+            if key in files and tag.search(files[key]):
+                issues.append(f'{key} repeats the layout {control["role"]} "{name}"; the layout already shows it on every page (rule 5)')
 
     # 9-11: browser dialogs, input types and imports
     for key, src in frontend.items():

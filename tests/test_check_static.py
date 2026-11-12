@@ -73,6 +73,19 @@ class StaticCheckTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertIn(expected, static_issues(files, plan))
 
+    def test_layout_link_repeated_in_a_page_file(self):
+        # Seen in both BookStack-lite runs: the header link again as a breadcrumb on detail pages, which the page
+        # check never opens because their routes have parameters.
+        files = changed(MAIN, "<article className=\"space-y-3\">", "<article className=\"space-y-3\">\n      <Link to=\"/notes\">\n        Notes\n      </Link>")
+        self.assertIn('frontend/src/pages/main.jsx repeats the layout link "Notes"; the layout already shows it on every page (rule 5)',
+                      static_issues(files, golden_plan()))
+        self.assertEqual(static_issues(golden_files(), golden_plan()), [])   # the heading "Notes" is not a link
+
+    def test_layout_button_repeated_in_a_page_file(self):
+        plan = golden_plan(); plan["layout"]["controls"].append({"role": "button", "name": "Delete", "when": "always"})
+        self.assertIn('frontend/src/pages/main.jsx repeats the layout button "Delete"; the layout already shows it on every page (rule 5)',
+                      static_issues(golden_files(), plan))
+
     def test_no_app_routes_skips_route_comparison(self):
         issues = static_issues(changed(APP, "app.", "router."), golden_plan())
         self.assertFalse([i for i in issues if i.startswith(("frontend calls", "plan API"))], issues)
