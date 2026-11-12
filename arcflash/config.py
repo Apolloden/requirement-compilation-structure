@@ -30,7 +30,10 @@ MAX_PAGES_PER_MODULE = 8
 REPAIR_CONTEXT_CHARS = 240_000
 REPORT_CHARS = 30_000
 IMAGE_MAX_SIDE = 1600
-PLAYWRIGHT_VERSION = "1.57.0"   # the ARC-Bench runner's version; its Chromium is preinstalled there
+PLAYWRIGHT_VERSION = "1.57.0"   # the ARC-Bench runner's version (preflight.json); its Chromium is preinstalled there
+# Playwright version → the Chromium build it drives. The harness uses the first one whose browser is installed.
+PLAYWRIGHT_CHROMIUM = {"1.57.0": "1200", "1.64.1": "1248"}
+BROWSER_INSTALL_TIMEOUT_SECONDS = 300
 CHECK_WORKERS = 4
 BOOT_TIMEOUT_SECONDS = 30
 BUILD_TIMEOUT_SECONDS = 300

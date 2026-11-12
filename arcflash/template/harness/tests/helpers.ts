@@ -64,6 +64,12 @@ export function uniqueName(baseName: string): string {
   return `${baseName} [${hex(8)}-w${info.workerIndex}-${slug}]`;
 }
 
+/** Letters, digits and _ only: for usernames, emails and other values with a fixed format. */
+export function uniqueId(baseName: string): string {
+  const base = baseName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "id";
+  return `${base}_${hex(5)}w${test.info().workerIndex}`;
+}
+
 export async function invalidateSession(page: Page): Promise<void> {
   const context = page.context();
   const cookies = await context.cookies();

@@ -54,7 +54,7 @@ export function PageNoteNew() {
   }
 
   return (
-    <form onSubmit={save} className="space-y-3">
+    <form noValidate onSubmit={save} className="space-y-3">
       <h1 className="text-2xl font-bold">Create Note</h1>
       {error && <div role="alert" className="text-red-700">{error}</div>}
       <div className="flex flex-col gap-1">

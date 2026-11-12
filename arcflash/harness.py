@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +33,35 @@ class TestResult:
     aria: str = ""
 
 
+def browsers_dir() -> Path:
+    """Where Playwright keeps its browsers: PLAYWRIGHT_BROWSERS_PATH, else the platform's default cache."""
+    configured = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if configured and configured != "0":
+        return Path(configured)
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "ms-playwright"
+    if sys.platform.startswith("win"):
+        return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ms-playwright"
+    return Path(os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))) / "ms-playwright"
+
+
+def choose_playwright_version(cache: Path | None = None) -> str:
+    """The first known version whose Chromium is already installed, so no browser download is needed."""
+    cache = cache if cache is not None else browsers_dir()
+    for version, build in config.PLAYWRIGHT_CHROMIUM.items():
+        if (cache / f"chromium_headless_shell-{build}").is_dir() or (cache / f"chromium-{build}").is_dir():
+            return version
+    return config.PLAYWRIGHT_VERSION
+
+
+def use_playwright_version(folder: Path, version: str) -> None:
+    """Set @playwright/test in folder/package.json to the given exact version."""
+    manifest = Path(folder) / "package.json"
+    data = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {"private": True}
+    data.setdefault("devDependencies", {})["@playwright/test"] = version
+    manifest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def _cli(harness: Path) -> list[str]:
     return ["node", str(Path(harness).resolve() / "node_modules" / "@playwright" / "test" / "cli.js")]
 
@@ -38,14 +69,16 @@ def _cli(harness: Path) -> list[str]:
 def prepare_harness(out: Path) -> HarnessStatus:
     """npm install in .arc/harness, then install Chromium (a no-op when it is already in the cache)."""
     harness = (Path(out) / ".arc" / "harness").resolve()
+    version = choose_playwright_version()
+    use_playwright_version(harness, version)
     try:
         install = proc.run([proc.npm(), "install", "--no-audit", "--no-fund"], harness, timeout=config.INSTALL_TIMEOUT_SECONDS)
     except FileNotFoundError as e:
         return HarnessStatus(False, str(e))
     if install.returncode != 0:
         return HarnessStatus(False, "npm install failed:\n" + proc.tail(install.output))
-    browser = proc.run(_cli(harness) + ["install", "chromium"], harness, timeout=config.INSTALL_TIMEOUT_SECONDS)
-    log = proc.tail(install.output, 20) + "\n" + proc.tail(browser.output, 20)
+    browser = proc.run(_cli(harness) + ["install", "chromium"], harness, timeout=config.BROWSER_INSTALL_TIMEOUT_SECONDS)
+    log = f"@playwright/test {version}\n" + proc.tail(install.output, 20) + "\n" + proc.tail(browser.output, 20)
     return HarnessStatus(browser.returncode == 0, log)
 
 

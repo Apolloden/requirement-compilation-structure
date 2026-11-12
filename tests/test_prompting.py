@@ -10,6 +10,7 @@ from tests.support import AGENT_ROOT, FIXTURES
 
 NOTES = FIXTURES / "specs" / "notes"
 PLAN_DOC = AGENT_ROOT.parent / "docs" / "arcflash-plan.md"
+AMENDED = {"rules", "tests"}   # changed on evidence from the paid checks; see docs/arcflash-changes.md
 
 
 class PromptTests(unittest.TestCase):
@@ -19,6 +20,13 @@ class PromptTests(unittest.TestCase):
         self.assertIn("{{problems}}", load_prompt("repair")); self.assertIn("{{imports}}", load_prompt("frontend_first"))
         for name in PROMPT_NAMES: self.assertTrue(load_prompt(name).strip(), name)
 
+    def test_amendments_after_the_paid_checks(self):
+        # P2 (docs/arcflash-changes.md): uniqueName values broke a username and an email field; native form validation
+        # blocked a submit without any visible message.
+        self.assertIn("<form noValidate>", load_prompt("rules"))
+        self.assertIn('uniqueId("<base>")', load_prompt("tests"))
+        self.assertIn("uniqueName, uniqueId, invalidateSession", load_prompt("tests"))
+
     @unittest.skipUnless(PLAN_DOC.is_file(), "plan document not next to the agent folder")
     def test_prompts_equal_appendix_a_exactly(self):
         text = PLAN_DOC.read_text(encoding="utf-8")
@@ -26,7 +34,8 @@ class PromptTests(unittest.TestCase):
         found = dict(re.findall(r"### A\.\d+ `([a-z_]+)\.md`[^\n]*\n\n```\n(.*?)\n```\n", appendix, re.S))
         self.assertEqual(set(found), set(PROMPT_NAMES))
         for name in PROMPT_NAMES:
-            self.assertEqual(load_prompt(name), found[name], name)
+            if name not in AMENDED:
+                self.assertEqual(load_prompt(name), found[name], name)
 
     def test_fill(self):
         self.assertEqual(fill("a {{x}} {y} {{x}}", x="1"), "a 1 {y} 1")

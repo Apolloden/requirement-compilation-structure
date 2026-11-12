@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from arcflash import config, proc  # noqa: E402
+from arcflash.harness import choose_playwright_version, use_playwright_version  # noqa: E402
 
 CONFIG = """import { defineConfig } from "@playwright/test";
 
@@ -73,13 +74,14 @@ def main(argv=None) -> int:
         shutil.copytree(tests_dir, tests)
         if not (tests / "playwright.config.ts").exists():
             (tests / "playwright.config.ts").write_text(CONFIG % args.port)
-        (tests / "package.json").write_text(json.dumps({"private": True, "devDependencies": {"@playwright/test": config.PLAYWRIGHT_VERSION}}))
+        (tests / "package.json").write_text(json.dumps({"private": True}))
+        use_playwright_version(tests, choose_playwright_version())
         install = proc.run([proc.npm(), "install", "--no-audit", "--no-fund"], tests, timeout=config.INSTALL_TIMEOUT_SECONDS)
         if install.returncode != 0:
             print("[grade] npm install for the tests failed:\n" + proc.tail(install.output, 30))
             return 1
         cli = ["node", str(tests / "node_modules" / "@playwright" / "test" / "cli.js")]
-        proc.run(cli + ["install", "chromium"], tests, timeout=config.INSTALL_TIMEOUT_SECONDS)
+        proc.run(cli + ["install", "chromium"], tests, timeout=config.BROWSER_INSTALL_TIMEOUT_SECONDS)
         print("[grade] running the tests", flush=True)
         result = proc.run(cli + ["test"], tests, timeout=config.BROWSER_RUN_TIMEOUT_SECONDS,
                           env=proc.local_env({"BASE_URL": base}))

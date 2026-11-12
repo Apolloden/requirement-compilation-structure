@@ -101,3 +101,28 @@ class CheckReportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlaywrightChoiceTests(unittest.TestCase):
+    """The harness uses the Playwright version whose Chromium is already installed (no download on the runner)."""
+
+    def setUp(self):
+        self.cache = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, self.cache, True)
+
+    def test_runner_version_when_nothing_is_installed(self):
+        from arcflash.harness import choose_playwright_version
+        self.assertEqual(choose_playwright_version(self.cache), "1.57.0")
+
+    def test_the_installed_browser_decides(self):
+        from arcflash.harness import choose_playwright_version
+        (self.cache / "chromium_headless_shell-1248").mkdir()
+        self.assertEqual(choose_playwright_version(self.cache), "1.64.1")
+        (self.cache / "chromium_headless_shell-1200").mkdir()
+        self.assertEqual(choose_playwright_version(self.cache), "1.57.0")   # the runner's version comes first
+
+    def test_browsers_path_from_the_environment(self):
+        from arcflash.harness import browsers_dir
+        from unittest import mock
+        import os
+        with mock.patch.dict(os.environ, {"PLAYWRIGHT_BROWSERS_PATH": str(self.cache)}):
+            self.assertEqual(browsers_dir(), self.cache)

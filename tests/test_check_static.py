@@ -86,6 +86,12 @@ class StaticCheckTests(unittest.TestCase):
         self.assertIn('frontend/src/pages/main.jsx repeats the layout button "Delete"; the layout already shows it on every page (rule 5)',
                       static_issues(golden_files(), plan))
 
+    def test_form_without_novalidate(self):
+        # P2: the browser's own validation blocked a submit silently; role-based tests never see its bubbles.
+        files = changed(MAIN, "<form noValidate onSubmit={save}", "<form onSubmit={save}")
+        self.assertIn('frontend/src/pages/main.jsx has a <form> without noValidate; add noValidate and show problems with role="alert" (rule 3)',
+                      static_issues(files, golden_plan()))
+
     def test_no_app_routes_skips_route_comparison(self):
         issues = static_issues(changed(APP, "app.", "router."), golden_plan())
         self.assertFalse([i for i in issues if i.startswith(("frontend calls", "plan API"))], issues)

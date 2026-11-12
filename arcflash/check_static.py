@@ -13,6 +13,7 @@ BACKEND_ROUTE = re.compile(r"\bapp\.(get|post|put|patch|delete)\(\s*([\"'`])(/ap
 EXPRESSION = re.compile(r"[\w$.]+")
 PLUS = re.compile(r"\s*\+\s*")
 DIALOG_CALL = re.compile(r"\bwindow\.(alert|confirm|prompt)\s*\(|(?<![\w$.])(?<!function )(alert|confirm|prompt)\s*\(")
+FORM_TAG = re.compile(r"<form\b(?:=>|[^>])*>")
 BAD_INPUT = re.compile(r"\btype\s*=\s*\{?\s*[\"'`](date|number)[\"'`]")
 CONTROL_TAGS = {"link": "Link|NavLink|a", "button": "button"}   # JSX tags that render a layout link or button
 IMPORT = re.compile(r"""\bimport\s+(?:[\w$*{}\s,]+?\s+from\s+)?["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)|\brequire\(\s*["']([^"']+)["']\s*\)""")
@@ -173,6 +174,8 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
             issues.append(f"{key} uses window.{kind}; use an in-page role=dialog or role=alert instead")
         for kind in sorted({m.group(1) for m in BAD_INPUT.finditer(src)}):
             issues.append(f'{key} uses an input of type "{kind}"; use type="text" (rule 3)')
+        if any("noValidate" not in m.group(0) for m in FORM_TAG.finditer(src)):
+            issues.append(f'{key} has a <form> without noValidate; add noValidate and show problems with role="alert" (rule 3)')
     sides = [("backend/app.js", backend, config.BACKEND_PACKAGES)] + [(k, v, config.FRONTEND_PACKAGES) for k, v in frontend.items()]
     for key, src, packages in sides:
         if src is None:
