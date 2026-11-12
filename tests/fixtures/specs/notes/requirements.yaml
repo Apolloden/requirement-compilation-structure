@@ -1,0 +1,65 @@
+id: ROOT
+name: Notes
+description:
+  text: A small public notebook. Dates use UTC and the shared clock 2026-01-01T09:00:00Z.
+scenarios: []
+children:
+- id: REQ-1
+  name: Notes
+  description:
+    text: Manage notes.
+  scenarios: []
+  children:
+  - id: REQ-1.1
+    name: Browse notes
+    description:
+      text: Opening / shows a "Notes"(role=link) link in navigation. Clicking it shows "Note list"(role=region) with every note once as a link named by its title.
+      image:
+      - id: IMG-NOTES
+        reference: reference/notes.png
+        page: notes
+    scenarios:
+    - id: SCN-REQ-1.1-01
+      name: List a created note
+      steps:
+      - id: STEP-REQ-1.1-01-01
+        Given: A UI-created note Note 1.1 with body Body 1.1.
+        When: Click Notes and inspect Note list.
+        Then: Exactly one entry links the note title.
+        references:
+        - \ref[requirement](REQ-1.2)
+        - \ref[image](IMG-NOTES)
+    children: []
+    dependencies: [REQ-1.2]
+  - id: REQ-1.2
+    name: Create a note
+    description:
+      text: From Notes, Create Note opens Title and Body text fields. Save Note creates the note and opens it with its title as a heading and its body. Cancel returns to Notes without creating it.
+    scenarios:
+    - id: SCN-REQ-1.2-01
+      name: Save a new note
+      steps:
+      - id: STEP-REQ-1.2-01-01
+        Given: No note has the isolated name Note 1.2.
+        When: Click Notes and Create Note, fill Title and Body, then Save Note. Reload.
+        Then: The note's title heading and body are visible before and after reload.
+    children: []
+    dependencies: []
+  - id: REQ-1.3
+    name: Delete a note
+    description:
+      text: Clicking "Delete"(role=button) on a note opens a confirmation with "Confirm Delete"(role=button) and "Cancel"(role=button). Confirm Delete removes the note and returns to Notes.
+    scenarios:
+    - id: SCN-REQ-1.3-01
+      name: Confirm deletion
+      steps:
+      - id: STEP-REQ-1.3-01-01
+        Given: A UI-created note Note 1.3 is open.
+        When: Click Delete, then Confirm Delete.
+        Then: Note list has no entry for the note.
+        references:
+        - \ref[requirement](REQ-1.2)
+    children: []
+    dependencies: [REQ-1.2]
+  dependencies: []
+dependencies: []
