@@ -1,0 +1,124 @@
+{
+ "suites": [
+  {
+   "title": "scenarios-1.spec.ts",
+   "file": "scenarios-1.spec.ts",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "SCN-REQ-1.1-01 List a created note",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "timedOut",
+         "duration": 30063,
+         "error": {
+          "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m",
+          "stack": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
+         },
+         "errors": [
+          {
+           "message": "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m"
+          },
+          {
+           "location": {
+            "file": "/tmp/check run/.arc/harness/tests/scenarios-1.spec.ts",
+            "column": 31,
+            "line": 9
+           },
+           "message": "Error: locator.fill: Test timeout of 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('textbox', { name: 'Body', exact: true })\u001b[22m\n\n\n   7 |   await action(page, \"Create Note\").click();\n   8 |   await textbox(page, \"Title\").fill(title);\n>  9 |   await textbox(page, \"Body\").fill(\"Body 1.1\");\n     |                               ^\n  10 |   await action(page, \"Save Note\").click();\n  11 |   await expect(heading(page, title)).toBeVisible();\n  12 |   await link(page, \"Notes\").click();\n    at /tmp/check run/.arc/harness/tests/scenarios-1.spec.ts:9:31"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-11-12T14:02:27.820Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "failure-context",
+           "contentType": "application/json",
+           "body": "eyJ1cmwiOiJodHRwOi8vMTI3LjAuMC4xOjU1NTg0L25vdGVzL25ldyIsImFyaWEiOiItIGJhbm5lcjpcbiAgLSBuYXZpZ2F0aW9uOlxuICAgIC0gbGluayBcIk5vdGVzXCI6XG4gICAgICAtIC91cmw6IC9ub3Rlc1xuLSBtYWluOlxuICAtIGhlYWRpbmcgXCJDcmVhdGUgTm90ZVwiIFtsZXZlbD0xXVxuICAtIHRleHQ6IFRpdGxlXG4gIC0gdGV4dGJveCBcIlRpdGxlXCI6IE5vdGUgMS4xIFs3Y2M1MTMzMDczZTBkYjkyLXcwLVNDTi1SRVEtMS0xLTAxLUxpc3QtYS1jcmVhdGVkLW5vdGVdXG4gIC0gdGV4dDogQ29udGVudFxuICAtIHRleHRib3ggXCJDb250ZW50XCJcbiAgLSBidXR0b24gXCJTYXZlIE5vdGVcIlxuICAtIGJ1dHRvbiBcIkNhbmNlbFwiIn0="
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/tmp/check run/.arc/harness/test-results/scenarios-1-SCN-REQ-1-1-01-List-a-created-note/error-context.md"
+          }
+         ]
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "b1ec0280247f27c396ca-f73db31343cf4ac03c69",
+     "file": "scenarios-1.spec.ts",
+     "line": 3,
+     "column": 5
+    }
+   ]
+  },
+  {
+   "title": "smoke.spec.ts",
+   "file": "smoke.spec.ts",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "smoke /",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 1,
+         "status": "passed",
+         "duration": 945,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-11-12T14:02:27.838Z",
+         "annotations": [],
+         "attachments": []
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4219922fea2e2bd3c691-023be9db98360d33309d",
+     "file": "smoke.spec.ts",
+     "line": 10,
+     "column": 7
+    }
+   ]
+  }
+ ],
+ "errors": [
+  {
+   "message": "Error: tests/scenarios-2.spec.ts: SyntaxError: Unexpected token"
+  }
+ ],
+ "stats": {
+  "expected": 1,
+  "unexpected": 1
+ }
+}
