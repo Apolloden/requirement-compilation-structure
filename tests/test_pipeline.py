@@ -189,10 +189,20 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result["shipped"]["source"], "template")
         self.assertIn("<h1>Application</h1>", (self.out / MAIN).read_text())
 
-    def test_foreign_output_folder_is_left_alone(self):
-        self.out.mkdir(); (self.out / "keep.txt").write_text("x")
+    def test_requirements_inside_the_output_folder(self):
+        # The ARC-Bench layout: main.py /workspace/template/requirements --output-dir /workspace/template
+        self.out.mkdir(); shutil.copytree(NOTES, self.out / "requirements")
+        (self.out / ".arc").mkdir(); (self.out / ".arc" / "runner-events.jsonl").write_text("{}\n")
+        result = self.run_quiet(self.out / "requirements", self.out, llm=golden_llm(), tools=tools(reports=[GREEN]))
+        self.assertEqual((result["shipped"]["source"], result["errors"]), ("a1-r0", []))
+        for rel in ("requirements/requirements.yaml", "requirements/reference/notes.png", ".arc/runner-events.jsonl",
+                    "package.json", "deploy.sh", "backend/server.js", "frontend/src/pages/main.jsx"):
+            self.assertTrue((self.out / rel).exists(), rel)
+
+    def test_an_output_path_that_is_a_file_ends_the_run(self):
+        self.out.write_text("x")
         result = self.run_quiet(NOTES, self.out, llm=golden_llm(), tools=tools())
-        self.assertTrue(result["errors"]); self.assertEqual([p.name for p in self.out.iterdir()], ["keep.txt"])
+        self.assertTrue(result["errors"]); self.assertEqual(self.out.read_text(), "x")
 
     def test_main_exits_zero_on_bad_input(self):
         empty_dir = self.tmp / "empty"; empty_dir.mkdir()

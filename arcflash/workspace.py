@@ -13,7 +13,9 @@ from arcflash.blocks import is_allowed_path
 
 TEMPLATE = Path(__file__).resolve().parent / "template"
 PLACEHOLDERS = ("backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/main.jsx")
-# What ArcFlash itself writes inside .arc/. Everything else there belongs to the runner and is never deleted.
+# What ArcFlash itself writes at the top of the output folder and inside .arc/. Everything else there (the runner's
+# .arc files, the requirements folder ARC-Bench puts inside the output folder) belongs to someone else and is never touched.
+OWN_APP = ("package.json", "package-lock.json", "deploy.sh", "backend", "frontend", "node_modules")
 OWN_ARC = re.compile(r"arcflash\.json|harness|versions|check|calls|digest\.txt|notes\.json|run\.json|plan-\d+\.json")
 _sleep = time.sleep
 
@@ -41,19 +43,13 @@ class Workspace:
     # ---- setup ------------------------------------------------------------------------------
 
     def init(self, req_dir: Path, assets: list[str]) -> None:
-        """Copy the template app, the harness and the assets into out, which must be ours, empty or runner-only."""
+        """Copy the template app, the harness and the assets into out, replacing only what ArcFlash produces."""
         if self.out.exists() and not self.out.is_dir():
             raise WorkspaceError(f"{self.out} exists and is not a folder")
-        if self.out.exists():
-            marked = (self.arc / "arcflash.json").is_file()
-            foreign = [p.name for p in self.out.iterdir() if p.name != ".arc"]
-            if foreign and not marked:
-                raise WorkspaceError(f"{self.out} already holds files that ArcFlash did not write "
-                                     f"({', '.join(sorted(foreign)[:5])}); choose an empty folder")
-            if marked:
-                for p in self.out.iterdir():
-                    if p.name != ".arc":
-                        _remove(p)
+        if self.out.is_dir():
+            for name in OWN_APP:
+                _remove(self.out / name)
+            if self.arc.is_dir():
                 for p in self.arc.iterdir():
                     if OWN_ARC.fullmatch(p.name):
                         _remove(p)

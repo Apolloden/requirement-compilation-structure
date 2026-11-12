@@ -37,18 +37,32 @@ class WorkspaceTests(unittest.TestCase):
             self.assertTrue((out / rel).exists(), rel)
         self.assertTrue((out / "deploy.sh").stat().st_mode & 0o111)
 
-    def test_init_refuses_foreign_content(self):
+    def test_init_keeps_foreign_content(self):
+        # ARC-Bench runs main.py /workspace/template/requirements --output-dir /workspace/template: the output folder
+        # already holds the requirements (and the runner's .arc files). Only what ArcFlash produces is replaced.
         self.out.mkdir()
         (self.out / "keep.txt").write_text("x")
-        with self.assertRaises(WorkspaceError): Workspace(self.out).init(NOTES, [])
-        self.assertTrue((self.out / "keep.txt").exists())
-        (self.out / "keep.txt").unlink()
-        ws = self.make()
-        (self.out / "stray.txt").write_text("x")
+        Workspace(self.out).init(self.req, [])
+        self.assertTrue((self.out / "keep.txt").exists()); self.assertTrue((self.out / "backend/server.js").exists())
+        ws = Workspace(self.out)
         (self.out / "frontend/src/pages/old.jsx").write_text("x")
+        (self.out / "node_modules").mkdir(); (self.out / "node_modules" / "x").write_text("x")
         ws.init(self.req, [])
-        self.assertFalse((self.out / "stray.txt").exists()); self.assertFalse((self.out / "frontend/src/pages/old.jsx").exists())
-        self.assertTrue((self.out / "backend/server.js").exists())
+        self.assertFalse((self.out / "frontend/src/pages/old.jsx").exists()); self.assertFalse((self.out / "node_modules").exists())
+        self.assertTrue((self.out / "keep.txt").exists()); self.assertTrue((self.out / "backend/server.js").exists())
+
+    def test_requirements_inside_the_output_folder(self):
+        self.out.mkdir()
+        inside = self.out / "requirements"
+        shutil.copytree(self.req, inside)
+        Workspace(self.out).init(inside, ["logo.png"])
+        self.assertTrue((inside / "requirements.yaml").exists()); self.assertTrue((inside / "assets" / "logo.png").exists())
+        self.assertTrue((self.out / "frontend/public/assets/logo.png").exists())
+        self.assertTrue((self.out / "deploy.sh").exists())
+
+    def test_an_output_path_that_is_a_file_is_refused(self):
+        self.out.write_text("x")
+        with self.assertRaises(WorkspaceError): Workspace(self.out).init(self.req, [])
 
     def test_init_keeps_runner_files_in_arc(self):
         # The ARC-Bench runner writes into .arc/ before it starts the agent.
