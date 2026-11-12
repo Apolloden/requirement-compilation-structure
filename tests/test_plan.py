@@ -89,6 +89,12 @@ class PlanTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertIn(expected, validate_plan(mutated(change), self.spec))
 
+    def test_role_only_element_has_an_empty_name(self):
+        # P2: "display an error with role=alert" gives no name; invented names cost two fix calls.
+        plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "alert", "name": "", "when": "after a failed save"}))
+        self.assertEqual(validate_plan(plan, self.spec), [])
+        self.assertIn('"name": ""', load_prompt("plan"))
+
     def test_names_from_screenshot_notes_are_accepted(self):
         plan = mutated(lambda p: page(p, "notes")["controls"].append({"role": "button", "name": "Sort by date", "when": "always"}))
         self.assertTrue(validate_plan(plan, self.spec))

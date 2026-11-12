@@ -42,6 +42,8 @@ def _control_problems(where: str, controls: list[dict], spec: Spec, notes_text: 
             problems.append(f'{where}: role "{role}" is not an ARIA role')
         if "{" in name:
             problems.append(f'{where}: control name "{name}" is filled in at runtime; describe it in "shows"')
+        elif name == "":
+            continue   # an element the text knows only by its role, such as an error with role=alert
         elif not name.strip() or (name not in spec.corpus and name not in notes_text):
             problems.append(f'{where}: control name "{name}" is not in the requirements or screenshot notes; copy names exactly')
     return problems

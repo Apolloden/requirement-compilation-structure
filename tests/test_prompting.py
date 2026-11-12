@@ -10,7 +10,7 @@ from tests.support import AGENT_ROOT, FIXTURES
 
 NOTES = FIXTURES / "specs" / "notes"
 PLAN_DOC = AGENT_ROOT.parent / "docs" / "arcflash-plan.md"
-AMENDED = {"rules", "tests"}   # changed on evidence from the paid checks; see docs/arcflash-changes.md
+AMENDED = {"rules", "tests", "plan"}   # changed on evidence from the paid checks; see docs/arcflash-changes.md
 
 
 class PromptTests(unittest.TestCase):
