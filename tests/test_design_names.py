@@ -73,3 +73,19 @@ class RuntimeNameGuidance(unittest.TestCase):                                 # 
         message = next(p for p in check_artifacts(**data, plan=plan) if "'Create New Book'" in p)
         self.assertIn("is not in the naming table", message)
         self.assertIn("if its name is filled in at runtime, leave prop.label out and declare the value in data", message)
+
+class PasswordFields(unittest.TestCase):                                      # found reading the sample input before its paid run
+    def test_a_password_field_satisfies_a_textbox_naming_entry(self):
+        # Browsers give a password input no textbox role, but the requirement names it like any field.
+        data = artifacts()
+        data["ui"]["elements"]["UI-page-form-secret"] = {"type": "input", "parent": data["ui"]["pages"]["page_form"]["root"],
+            "mode": ["user_write"], "data": [], "prop": {"label": "Password", "input_type": "password"}}
+        plan = derived_plan(data["ui"])
+        plan["naming"].append({"name": "Password", "role": "textbox", "pages": ["page_form"]})
+        self.assertFalse(any("'Password'" in p for p in check_artifacts(**data, plan=plan)))
+
+    def test_a_missing_password_field_is_still_reported(self):
+        data = artifacts()
+        plan = derived_plan(data["ui"])
+        plan["naming"].append({"name": "Password", "role": "textbox", "pages": ["page_form"]})
+        self.assertIn("ui_design.pages.page_form: no textbox named 'Password' (naming table)", check_artifacts(**data, plan=plan))

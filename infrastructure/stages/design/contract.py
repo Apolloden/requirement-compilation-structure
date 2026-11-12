@@ -19,7 +19,7 @@ from infrastructure.stages.database.obligations.records import (check_symbols, n
     normalize_obligations)
 from infrastructure.stages.backend.primitives import validate_design
 from infrastructure.stages.frontend.triggers.design import validate_coverage
-from infrastructure.stages.design.names import named_elements, page_subtree
+from infrastructure.stages.design.names import element_name, is_password_field, named_elements, page_subtree
 
 FIELD_TYPES = {"string", "integer", "number", "boolean", "date", "datetime", "uuid", "json"}
 DTYPES = {"string", "integer", "number", "boolean", "array", "object", "null"}
@@ -279,12 +279,15 @@ def check_naming(ui, plan, problems, skipped=frozenset(), complete=None):
     for pid in ui["pages"]:
         page_plan = plan_pages.get(pid) or {}
         found = named_elements(ui, pid, plan)
+        # A password field counts for a textbox entry with its name (tests look it up by its label).
+        passwords = [(uid, "textbox", element_name(ui["elements"][uid])) for uid in page_subtree(ui, pid)
+            if is_password_field(ui["elements"][uid]) and element_name(ui["elements"][uid])]
         listed = [entry for entry in naming if pid in (entry.get("pages") or [])]
         exempt = any(rid in skipped for rid in page_plan.get("requirements") or []) or (
             complete is not None and pid not in complete)
         for entry in listed:
             role, name = entry.get("role"), entry.get("name")
-            uids = [uid for uid, found_role, found_name in found if (found_role, found_name) == (role, name)]
+            uids = [uid for uid, found_role, found_name in found + passwords if (found_role, found_name) == (role, name)]
             if not uids and not exempt:
                 problems.append(f"ui_design.pages.{pid}: no {role} named {name!r} (naming table)")
             elif len(uids) > 1:

@@ -40,6 +40,11 @@ def element_role(node: dict, region_names=frozenset()) -> str | None:
     return None
 
 
+def is_password_field(node: dict) -> bool:
+    """A password input: named like a field, but a browser gives it no textbox role."""
+    return node.get("type") == "input" and (node.get("prop") or {}).get("input_type") == "password"
+
+
 def page_subtree(design: dict, pid: str) -> list[str]:
     """IDs of the elements under a page's root (the root included), in design order."""
     elements = design.get("elements", {})
