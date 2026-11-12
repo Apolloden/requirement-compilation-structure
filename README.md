@@ -12,7 +12,7 @@ Design and tasks: `../docs/arcflash-plan.md`. Change log: `../docs/arcflash-chan
 
 ## Commands (from this folder)
 
-- Setup: `uv sync` (Node 22 and npm must be on `PATH`; Playwright installs Chromium into its cache on first use)
+- Setup: `uv sync` (Node 22 and npm must be on `PATH`). The check uses the Playwright version whose Chromium is already installed: 1.57.0 (the ARC-Bench runner's, Chromium build 1200) or 1.64.1 (build 1248); with neither, it tries to install 1.57.0's for at most 5 minutes
 - Run (costs money): `.venv/bin/python main.py <requirements-dir> -o <out>`, for example `.venv/bin/python main.py input -o outputs/sample-1`
 - Start a finished app: `cd <out> && bash deploy.sh`, then open http://localhost:3000 (or set `PORT`)
 - Grade a finished app with a test folder: `.venv/bin/python scripts/grade_local.py <out> <tests-dir> [--port 3311] [--keep]`
