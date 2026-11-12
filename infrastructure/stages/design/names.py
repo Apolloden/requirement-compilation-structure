@@ -4,7 +4,7 @@ A test written from the requirement text finds a control by its role and its vis
 (for example the link "Home" or the text box named by its placeholder). These helpers read
 the same two facts from a design element so the design can be checked against them."""
 
-ROLES = ("link", "button", "heading", "textbox", "combobox", "checkbox", "region")
+ROLES = ("link", "button", "heading", "textbox", "combobox", "checkbox", "region", "radiogroup")
 TEXTBOX_INPUTS = {"text", "textarea", "email", "tel", "url"}
 SIMPLE_ROLES = {"link": "link", "button": "button", "heading": "heading", "select": "combobox",
     "checkbox": "checkbox"}
@@ -26,8 +26,10 @@ def element_name(node: dict) -> str | None:
     return value
 
 
-def element_role(node: dict, region_names=frozenset()) -> str | None:
-    """The role a browser test would use for the element, or None when it has no such role."""
+def element_role(node: dict, region_names=frozenset(), radio_group: bool = False) -> str | None:
+    """The role a browser test would use for the element, or None when it has no such role.
+
+    radio_group: the element directly holds radio inputs; with a name it is a radiogroup."""
     kind = node.get("type")
     if kind in SIMPLE_ROLES:
         return SIMPLE_ROLES[kind]
@@ -35,6 +37,8 @@ def element_role(node: dict, region_names=frozenset()) -> str | None:
         input_type = (node.get("prop") or {}).get("input_type")
         return "textbox" if input_type is None or input_type in TEXTBOX_INPUTS else None
     if kind in ("container", "list"):
+        if radio_group and element_name(node):
+            return "radiogroup"
         # A region only counts when the naming table names it; most containers are layout only.
         return "region" if element_name(node) in region_names else None
     return None
@@ -65,10 +69,12 @@ def named_elements(design: dict, pid: str, plan: dict | None = None) -> list[tup
     """(element ID, role, name) for every element on the page that has both a role and a fixed name."""
     region_names = {entry.get("name") for entry in (plan or {}).get("naming", [])
         if isinstance(entry, dict) and entry.get("role") == "region"}
+    radio_parents = {node.get("parent") for node in design.get("elements", {}).values()
+        if node.get("type") == "input" and (node.get("prop") or {}).get("input_type") == "radio"}
     found = []
     for uid in page_subtree(design, pid):
         node = design["elements"][uid]
-        role, name = element_role(node, region_names), element_name(node)
+        role, name = element_role(node, region_names, uid in radio_parents), element_name(node)
         if role and name:
             found.append((uid, role, name))
     return found

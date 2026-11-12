@@ -119,8 +119,9 @@ pages maps PAGE IDs (lower-case letters, digits and underscores) to
 {"name", "route", "images", "layout", "requirements"}. route is a URL path starting with
 "/"; parameters are written ":name". Use each route once. images lists supplied image IDs;
 keep each image's page hint. layout is true when the page shows the shared header.
-requirements lists the leaf requirement IDs whose behavior happens on this page. Every
-leaf requirement appears on at least one page.
+requirements lists the leaf requirement IDs whose behavior happens on this page,
+including the pages a scenario starts on or returns to. Every leaf requirement appears on
+at least one page.
 
 layout.elements is the shared header and navigation, designed once: a map of ELEMENT IDs
 ("UI-layout-...") to {type, parent, mode, data, prop}, the same format as page elements.
@@ -135,8 +136,8 @@ fields, text for headings, href for links. Example header link: {"type": "link",
 "href": "/"}}.
 
 naming lists every control the requirement text names:
-{"name": exact text, "role": link, button, heading, textbox, combobox, checkbox or region,
- "pages": [PAGE IDs]}.
+{"name": exact text, "role": link, button, heading, textbox, combobox, checkbox,
+ radiogroup or region, "pages": [PAGE IDs]}.
 - Copy names exactly: spelling, case and punctuation.
 - A role annotation such as "Save"(role=button) fixes the role. Otherwise choose the role
   the wording implies: something that navigates is a link, something that acts is a button.
@@ -144,8 +145,10 @@ naming lists every control the requirement text names:
 - A name appears at most once per role on a page. If a header control and a page control
   would share a role and name, keep the header control only.
 - Do not list names that are filled in at runtime, such as a record's own title.
-- List only controls that have one of these roles. A radio group, its radio options or an
-  alert is not listed; never give a control a different role to fit this list.
+- A choice shown as radio buttons is a radiogroup named by its field name; its options
+  are not listed.
+- List only controls that have one of these roles. An alert is not listed;
+  never give a control a different role to fit this list.
 
 Links, buttons and fields come from the requirement text. Reference images decide
 arrangement and style only: do not add a control because a screenshot shows one.

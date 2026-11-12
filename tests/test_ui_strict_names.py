@@ -42,3 +42,10 @@ class StrictNames(unittest.TestCase):
         suite = existence_suite(ui, "books", answer("p2"))
         tests = suite.count("test(")
         self.assertEqual(suite.count('{ name: "Create New Book", exact: true }'), tests)
+
+    def test_radio_group_gets_a_strict_assertion(self):
+        ui = design()
+        ui["elements"]["UI-books-choice"] = {"type": "container", "parent": "UI-books", "mode": [], "data": [], "prop": {"label": "Sort order"}}
+        ui["elements"]["UI-books-choice-a"] = {"type": "input", "parent": "UI-books-choice", "mode": ["user_write"], "data": [],
+            "prop": {"label": "Name", "input_type": "radio"}}
+        self.assertIn('getByRole("radiogroup", { name: "Sort order", exact: true })', existence_suite(ui, "books", answer("p2")))

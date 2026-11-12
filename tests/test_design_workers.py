@@ -197,6 +197,8 @@ class CrossPageControls(unittest.TestCase):                                   # 
         model = ReplayModel([answer("u_REQ-3")])
         workers.ui_worker(state, GROUPS["REQ-3"], tree, lite_contexts(tree), model, Mock())
         request = model.requests[0][1]
-        self.assertEqual(request["other_pages"]["home"]["UI-nav-books"], {"role": "link", "name": "Books"})
+        self.assertEqual({k: request["other_pages"]["home"]["UI-nav-books"][k] for k in ("role", "name")}, {"role": "link", "name": "Books"})
+        # A display filled in at runtime is listed by its type and data, so a later group can reuse it.
+        self.assertEqual(request["other_pages"]["home"]["UI-recent-books-list"], {"type": "list", "data": ["workspace.recentlyViewedBooks"]})
         self.assertFalse(set(request["other_pages"]) & set(request["pages"]))
-        self.assertIn("other_pages lists the named controls", model.requests[0][0])
+        self.assertIn("other_pages lists the controls and displays", model.requests[0][0])

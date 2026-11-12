@@ -89,3 +89,30 @@ class PasswordFields(unittest.TestCase):                                      # 
         plan = derived_plan(data["ui"])
         plan["naming"].append({"name": "Password", "role": "textbox", "pages": ["page_form"]})
         self.assertIn("ui_design.pages.page_form: no textbox named 'Password' (naming table)", check_artifacts(**data, plan=plan))
+
+class RadioGroups(unittest.TestCase):                                         # found in the paid run on the sample input
+    # The sample's tests look the gender choice up as getByRole('radiogroup', { name: 'Gender' }).
+    def design_with_group(self, label="Gender"):
+        ui = artifacts()["ui"]; root = ui["pages"]["book_form"]["root"]
+        ui["elements"]["UI-x-group"] = {"type": "container", "parent": root, "mode": [], "data": [],
+            "prop": {"label": label} if label else {}}
+        for option in ("Male", "Female"):
+            ui["elements"][f"UI-x-{option}"] = {"type": "input", "parent": "UI-x-group", "mode": ["user_write"],
+                "data": [], "prop": {"label": option, "input_type": "radio"}}
+        return ui
+
+    def test_a_named_group_of_radio_inputs_is_a_radiogroup(self):
+        self.assertIn(("UI-x-group", "radiogroup", "Gender"), named_elements(self.design_with_group(), "book_form"))
+        self.assertIn("radiogroup", __import__("infrastructure.stages.design.names", fromlist=["ROLES"]).ROLES)
+
+    def test_a_group_without_a_name_or_without_radio_inputs_is_not(self):
+        self.assertFalse(any(role == "radiogroup" for _, role, _ in named_elements(self.design_with_group(None), "book_form")))
+        ui = artifacts()["ui"]
+        self.assertFalse(any(role == "radiogroup" for pid in ui["pages"] for _, role, _ in named_elements(ui, pid)))
+
+    def test_a_radiogroup_naming_entry_is_checked(self):
+        data = artifacts(); plan = derived_plan(data["ui"])
+        plan["naming"].append({"name": "Gender", "role": "radiogroup", "pages": ["book_form"]})
+        self.assertIn("ui_design.pages.book_form: no radiogroup named 'Gender' (naming table)", check_artifacts(**data, plan=plan))
+        data["ui"] = self.design_with_group()
+        self.assertFalse(any("'Gender'" in p for p in check_artifacts(**data, plan=plan)))
