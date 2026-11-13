@@ -11,6 +11,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.ARCFLASH_BASE_URL,
     headless: true,
+    actionTimeout: 10000,
     trace: "off",
     screenshot: "off",
     video: "off",

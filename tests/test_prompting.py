@@ -61,6 +61,13 @@ class PromptTests(unittest.TestCase):
         self.assertIn("navigation", tests); self.assertIn("placeholder(", tests)
         self.assertIn("never substitute region for another role", tests)
 
+    def test_a_missing_element_fails_a_step_after_10_seconds(self):
+        # Like the grader (evidence.md section 2.3; the calibrated grader-style suites use actionTimeout 10000). With only the
+        # 30 s test timeout, 137 failing tests held the Ctrip check for 1,195 s and no repair round fit in the time budget.
+        config = (AGENT_ROOT / "arcflash" / "template" / "harness" / "playwright.config.ts").read_text(encoding="utf-8")
+        self.assertIn("actionTimeout: 10000", config)
+        self.assertIn("timeout: 30000", config)   # a long test that passes keeps its time
+
     def test_fill(self):
         self.assertEqual(fill("a {{x}} {y} {{x}}", x="1"), "a 1 {y} 1")
         with self.assertRaises(KeyError): fill("{{missing}}")
