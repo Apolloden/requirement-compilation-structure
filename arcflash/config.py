@@ -11,6 +11,7 @@ RETRY_WAITS = (15, 30, 60, 120)
 STREAM_IDLE_SECONDS = 180
 RUNAWAY_BLANK_CHARS = 2000
 RUNAWAY_REPEAT_LINES = 30
+RUNAWAY_NUMBER_RUN = 300     # an answer ending in this many comma-separated integers is counting, not planning
 CONTINUE_PROMPT = "Continue exactly where your previous answer stopped. Output only the continuation, without repeating anything."
 RUNAWAY_PROMPT = "Your previous answer turned into blank or repeated text. Answer again, briefly and completely."
 MAX_REPAIR_ROUNDS = 3

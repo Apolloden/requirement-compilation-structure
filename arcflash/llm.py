@@ -62,9 +62,24 @@ class Usage:
         return {"calls": len(records), **t, "list_cny": list_cny, "billed_cny": list_cny * config.PLATFORM_COST_FACTOR}
 
 
+def _ends_in_number_run(text: str) -> bool:
+    """The text ends (trailing spaces and one comma ignored) with RUNAWAY_NUMBER_RUN comma-separated integers in a row."""
+    parts = text[-config.RUNAWAY_NUMBER_RUN * 16:].rstrip().removesuffix(",").split(",")
+    run = 0
+    for part in reversed(parts):
+        if not part.strip().lstrip("-").isdigit():
+            break
+        run += 1
+        if run >= config.RUNAWAY_NUMBER_RUN:
+            return True
+    return False
+
+
 def is_runaway(text: str) -> bool:
-    """True when the answer ends in a long blank stretch or in the same non-empty line many times."""
+    """True when the answer ends in a long blank stretch, the same non-empty line many times, or a long run of numbers."""
     if len(text) >= config.RUNAWAY_BLANK_CHARS and not text[-config.RUNAWAY_BLANK_CHARS:].strip():
+        return True
+    if _ends_in_number_run(text):
         return True
     lines = text.split("\n")
     if lines and lines[-1] == "":

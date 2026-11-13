@@ -74,6 +74,15 @@ class LLMTests(unittest.TestCase):
         self.assertFalse(is_runaway("\n" * 40))  # blank lines are counted by the blank rule, not this one
         self.assertTrue(is_runaway("x" + " " * config.RUNAWAY_BLANK_CHARS))
 
+    def test_counting_sequence_is_a_runaway(self):
+        # evidence.md C4: a Ctrip plan filled "notes" with 1 to 10000, one number per line, and hit the token limit 3 times.
+        self.assertTrue(is_runaway('{"notes": [' + ", ".join(str(i) for i in range(1, 2000))))
+        self.assertTrue(is_runaway('{"app": {"notes": [\n' + "".join(f"    {i},\n" for i in range(1, 400))))
+
+    def test_a_normal_list_of_numbers_is_not(self):
+        self.assertFalse(is_runaway('{"ids": [' + ", ".join(str(i) for i in range(1, 60)) + "]}"))
+        self.assertFalse(is_runaway('{"ids": [' + ", ".join(str(i) for i in range(1, 2000)) + '], "next": "x"'))
+
     def test_runaway_is_retried_once_with_a_note(self):
         c = self.make([stream_chunks(" " * 2500, pieces=50), stream_chunks("fine")]).complete_long("x", None, "u", max_tokens=10)
         self.assertEqual(c.text, "fine")
