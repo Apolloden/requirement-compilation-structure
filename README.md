@@ -6,7 +6,7 @@ It checks the whole app locally (static checks, build, start, a page check and P
 It repairs the app with SEARCH/REPLACE edits in at most 3 rounds, keeps the best version, and restarts once from a new plan if the result is poor.
 Every call uses `deepseek-flash` with thinking off; the endpoint and key come only from `OPENAI_BASE_URL` and `OPENAI_API_KEY`.
 
-Design and tasks: `../docs/arcflash-plan.md`. Change log: `../docs/arcflash-changes.md`.
+Results of the ARC-Bench run: `RESULTS.md`. Design and tasks: `../docs/3-arcflash/arcflash-plan.md`. Change log: `../docs/3-arcflash/arcflash-changes.md`. These two documents are kept in the course workspace next to this folder, not in this repository.
 
 **A full run costs money. Ask first.**
 

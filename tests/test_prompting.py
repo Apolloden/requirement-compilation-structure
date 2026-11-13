@@ -9,8 +9,8 @@ from tests.golden import golden_plan
 from tests.support import AGENT_ROOT, FIXTURES
 
 NOTES = FIXTURES / "specs" / "notes"
-PLAN_DOC = AGENT_ROOT.parent / "docs" / "arcflash-plan.md"
-AMENDED = {"rules", "tests", "plan"}   # changed on evidence from the paid checks; see docs/arcflash-changes.md
+PLAN_DOC = AGENT_ROOT.parent / "docs" / "3-arcflash" / "arcflash-plan.md"
+AMENDED = {"rules", "tests", "plan"}   # changed on evidence from the paid checks; see docs/3-arcflash/arcflash-changes.md
 
 
 class PromptTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class PromptTests(unittest.TestCase):
         for name in PROMPT_NAMES: self.assertTrue(load_prompt(name).strip(), name)
 
     def test_amendments_after_the_paid_checks(self):
-        # P2 (docs/arcflash-changes.md): uniqueName values broke a username and an email field; native form validation
+        # P2 (docs/3-arcflash/arcflash-changes.md): uniqueName values broke a username and an email field; native form validation
         # blocked a submit without any visible message.
         self.assertIn("<form noValidate>", load_prompt("rules"))
         self.assertIn('uniqueId("<base>")', load_prompt("tests"))
