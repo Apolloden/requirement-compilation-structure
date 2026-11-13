@@ -121,6 +121,7 @@ TAG_START = re.compile(r"<([A-Za-z][\w.]*)")
 TAG_REST = re.compile(r"(?:=>|[^>])*>")
 EXPLICIT_ROLE = re.compile(r"(?<![\w-])role\s*=\s*(\{?)\s*([\"'`]?)([\w-]*)")
 HELPER_CALL = re.compile(rf"(?<![\w$.])({'|'.join(ROLE_HELPERS)})\(\s*[\w$.]+\s*,\s*")
+PLACEHOLDER = re.compile(r"(?<![\w-])placeholder\s*=\s*")
 ESCAPE = re.compile(r"\\(.)", re.S)
 
 
@@ -169,6 +170,10 @@ def _rendered_roles(src: str, name: str) -> list[tuple[str, str | None]]:
             role = None if tag[0].isupper() else "generic"
         hits.append((tag, role))
     return hits
+
+
+def _placeholders(sources: list[str]) -> set[str]:
+    return {v.strip() for src in sources for m in PLACEHOLDER.finditer(src) if (v := _attribute_value(src, m.end())) is not None}
 
 
 def role_issues(files: dict[str, str], controls: list[dict]) -> list[str]:
@@ -275,6 +280,13 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
         if name.strip() and not _name_present(name, sources):
             issues.append(f'{control.get("role")} "{name}" ({where}) does not appear in the frontend code')
 
+    # 8-placeholder: a field named with hint text is also found by its placeholder (rule 3, evidence.md C3)
+    placeholders = _placeholders(sources)
+    for control, where in named:
+        name = str(control.get("name", "")).strip()
+        if control.get("role") == "textbox" and name.endswith(("...", "…")) and name not in placeholders:
+            issues.append(f'textbox "{name}" ({where}) needs placeholder="{name}" as well as its label (rule 3)')
+
     # 8a: the roles named areas render, in the code and in our tests (rule 6)
     issues += role_issues(files, [c for c, _ in named])
 
@@ -292,11 +304,12 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
     # 8c: hover menus that a click closes (rule 16)
     issues += menu_issues(frontend)
 
-    # 9-11: browser dialogs, input types and imports
+    # 9-11: browser dialogs, input types and imports; type="number" is the spinbutton the requirements may state
+    allowed_types = {"number"} if any(c.get("role") == "spinbutton" for c, _ in named) else set()
     for key, src in frontend.items():
         for kind in sorted({m.group(1) or m.group(2) for m in DIALOG_CALL.finditer(src)}):
             issues.append(f"{key} uses window.{kind}; use an in-page role=dialog or role=alert instead")
-        for kind in sorted({m.group(1) for m in BAD_INPUT.finditer(src)}):
+        for kind in sorted({m.group(1) for m in BAD_INPUT.finditer(src)} - allowed_types):
             issues.append(f'{key} uses an input of type "{kind}"; use type="text" (rule 3)')
         if any("noValidate" not in m.group(0) for m in FORM_TAG.finditer(src)):
             issues.append(f'{key} has a <form> without noValidate; add noValidate and show problems with role="alert" (rule 3)')

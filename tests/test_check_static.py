@@ -16,6 +16,10 @@ def changed(key, old, new):
     return files
 
 
+def page_of(plan, page_id):
+    return next(p for p in plan["pages"] if p["id"] == page_id)
+
+
 def with_control(role, name):
     plan = golden_plan(); plan["layout"]["controls"].append({"role": role, "name": name, "when": "always"})
     return plan
@@ -199,6 +203,31 @@ class MenuCheckTests(unittest.TestCase):
         files = changed(SHARED, "<nav ", '<div onMouseEnter={() => setOpen(true)}><button onClick={() => setOpen(!open)}>Menu</button></div><nav ')
         self.assertIn("frontend/src/shared.jsx opens a menu on hover and toggles it on click; a click right after "
                       "the hover closes it. Make the click open it (setOpen(true)) (rule 16)", static_issues(files, golden_plan()))
+
+
+class FieldCheckTests(unittest.TestCase):
+    # evidence.md C3: a field named with hint text ("...") had only a label; a placeholder lookup never found it.
+    def test_hint_named_field_needs_a_placeholder(self):
+        plan = golden_plan(); page_of(plan, "note_new")["controls"].append({"role": "textbox", "name": "Type here...", "when": "always"})
+        files = changed(MAIN, 'id="note-title"', 'id="note-title" aria-label="Type here..."')
+        self.assertIn('textbox "Type here..." (page note_new) needs placeholder="Type here..." as well as its label (rule 3)',
+                      static_issues(files, plan))
+        done = changed(MAIN, 'id="note-title"', 'id="note-title" aria-label="Type here..." placeholder={"Type here..."}')
+        self.assertFalse([i for i in static_issues(done, plan) if "needs placeholder" in i])
+        unicode = golden_plan(); page_of(unicode, "note_new")["controls"].append({"role": "textbox", "name": "Type here…", "when": "always"})
+        self.assertIn('textbox "Type here…" (page note_new) needs placeholder="Type here…" as well as its label (rule 3)',
+                      static_issues(changed(MAIN, 'id="note-title"', 'id="note-title" aria-label="Type here…"'), unicode))
+
+    def test_plain_field_names_need_no_placeholder_check(self):
+        self.assertFalse([i for i in static_issues(golden_files(), golden_plan()) if "needs placeholder" in i])
+
+    def test_number_input_allowed_only_for_a_planned_spinbutton(self):
+        files = changed(MAIN, '<input id="note-title" type="text"', '<input id="note-title" type="number"')
+        self.assertIn('frontend/src/pages/main.jsx uses an input of type "number"; use type="text" (rule 3)', static_issues(files, golden_plan()))
+        plan = golden_plan(); page_of(plan, "note_new")["controls"].append({"role": "spinbutton", "name": "Title", "when": "always"})
+        self.assertNotIn('frontend/src/pages/main.jsx uses an input of type "number"; use type="text" (rule 3)', static_issues(files, plan))
+        dated = changed(MAIN, '<input id="note-title" type="text"', '<input id="note-title" type="date"')
+        self.assertIn('frontend/src/pages/main.jsx uses an input of type "date"; use type="text" (rule 3)', static_issues(dated, plan))
 
 
 if __name__ == "__main__":
