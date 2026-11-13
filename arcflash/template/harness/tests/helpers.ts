@@ -39,6 +39,27 @@ export const radio = byRole("radio");
 export const radiogroup = byRole("radiogroup");
 export const heading = byRole("heading");
 export const region = byRole("region");
+export const navigation = byRole("navigation");
+export const row = byRole("row");
+export const listitem = byRole("listitem");
+export const article = byRole("article");
+export const group = byRole("group");
+export const status = byRole("status");
+export const searchbox = byRole("searchbox");
+export const spinbutton = byRole("spinbutton");
+export const tab = byRole("tab");
+export const tabpanel = byRole("tabpanel");
+export const menuitem = byRole("menuitem");
+
+/** Any other role the requirements state, by its ARIA name, with an exact accessible name. */
+export function role(surface: Surface, ariaRole: string, name: string): Locator {
+  return surface.getByRole(ariaRole as Parameters<Page["getByRole"]>[0], { name, exact: true });
+}
+
+/** A field the requirements name by its hint text. */
+export function placeholder(surface: Surface, value: string): Locator {
+  return surface.getByPlaceholder(value, { exact: true });
+}
 
 export function action(surface: Surface, name: string): Locator {
   return button(surface, name).or(link(surface, name));

@@ -49,6 +49,18 @@ class PromptTests(unittest.TestCase):
             if name not in AMENDED:
                 self.assertEqual(load_prompt(name), found[name], name)
 
+    def test_helpers_export_every_role_helper(self):
+        # evidence.md C1: with only region() available, our tests looked up a navigation landmark as a region, like the code.
+        helpers = (AGENT_ROOT / "arcflash" / "template" / "harness" / "tests" / "helpers.ts").read_text(encoding="utf-8")
+        for export in ("export const navigation", "export const row", "export const listitem", "export const article",
+                       "export const group", "export const status", "export const searchbox", "export const spinbutton",
+                       "export const tab ", "export const tabpanel", "export const menuitem", "export function role(",
+                       "export function placeholder("):
+            self.assertIn(export, helpers)
+        tests = load_prompt("tests")
+        self.assertIn("navigation", tests); self.assertIn("placeholder(", tests)
+        self.assertIn("never substitute region for another role", tests)
+
     def test_fill(self):
         self.assertEqual(fill("a {{x}} {y} {{x}}", x="1"), "a 1 {y} 1")
         with self.assertRaises(KeyError): fill("{{missing}}")
