@@ -27,6 +27,18 @@ class PromptTests(unittest.TestCase):
         self.assertIn('uniqueId("<base>")', load_prompt("tests"))
         self.assertIn("uniqueName, uniqueId, invalidateSession", load_prompt("tests"))
 
+    def test_rules_cover_every_role_the_specs_use(self):
+        # ARC-Bench run 2026-11-13 (docs/4-arcflash-update/evidence.md C1-C3): roles the spec states that the rules had no words for.
+        rules = load_prompt("rules")
+        for markup in ('<nav aria-label=', '<section aria-label=', '<article aria-label=', '<tr aria-label=',
+                       '<li aria-label=', 'role="group"', 'role="status"', 'role="timer"',
+                       'type="search"', 'type="number"', 'role="tabpanel"'):
+            self.assertIn(markup, rules)
+        self.assertIn("16. Menus.", rules)
+        self.assertIn("placeholder", rules.split("4. Choices.")[0])   # rule 3 sets placeholders
+        self.assertLess(len(rules), 5233 + 1500)                       # rules.md was 5,233 characters; see the update plan's constraints
+        self.assertIn("use menuitem, tab, option or switch only where the requirements state that role", load_prompt("plan"))
+
     @unittest.skipUnless(PLAN_DOC.is_file(), "plan document not next to the agent folder")
     def test_prompts_equal_appendix_a_exactly(self):
         text = PLAN_DOC.read_text(encoding="utf-8")
