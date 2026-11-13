@@ -106,6 +106,15 @@ class StaticCheckTests(unittest.TestCase):
         self.assertIn('frontend/src/pages/main.jsx has a <form> without noValidate; add noValidate and show problems with role="alert" (rule 3)',
                       static_issues(files, golden_plan()))
 
+    def test_parameter_segment_matches_a_fixed_word(self):
+        # Graded BookStack run: the backend had /api/favorites/:type/:id and the frontend called /api/favorites/book/${id};
+        # Express serves that call, so it is not a missing route.
+        files = changed(APP, "app.get(\"/api/notes\"", "app.get(\"/api/things/:kind/:id\", (req, res) => res.json({}));\n  app.get(\"/api/notes\"")
+        files[MAIN] = files[MAIN].replace("  async function remove() {", "  api.get(`/api/things/book/${id}`);\n  async function remove() {", 1)
+        self.assertFalse([i for i in static_issues(files, golden_plan()) if "/api/things" in i])
+        files[MAIN] = files[MAIN].replace("api.get(`/api/things/book/${id}`)", "api.get(`/api/things/book`)", 1)
+        self.assertIn("frontend calls GET /api/things/book but backend/app.js has no such route", static_issues(files, golden_plan()))
+
     def test_no_app_routes_skips_route_comparison(self):
         issues = static_issues(changed(APP, "app.", "router."), golden_plan())
         self.assertFalse([i for i in issues if i.startswith(("frontend calls", "plan API"))], issues)

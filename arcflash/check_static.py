@@ -87,6 +87,12 @@ def frontend_api_calls(sources: dict[str, str]) -> set[tuple[str, str]]:
     return calls
 
 
+def route_serves(route: str, call: str) -> bool:
+    """Express semantics: a :p segment of the route matches any one segment of the call."""
+    r, c = route.split("/"), call.split("/")
+    return len(r) == len(c) and all(a == b or a == ":p" for a, b in zip(r, c))
+
+
 def backend_routes(source: str) -> set[tuple[str, str]]:
     return {(METHODS[m.group(1)], normalize_api_path(m.group(3))) for m in BACKEND_ROUTE.finditer(source)}
 
@@ -263,6 +269,8 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
             issues.append('backend/app.js registers no app.<method>("/api/...") routes; register every route on app with its full path')
         else:
             for method, path in sorted(frontend_api_calls(frontend) - routes):
+                if any(m == method and route_serves(r, path) for m, r in routes):
+                    continue
                 issues.append(f"frontend calls {method} {path} but backend/app.js has no such route")
             for api in plan.get("api", []):
                 if isinstance(api, dict) and api.get("path"):
