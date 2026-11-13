@@ -117,6 +117,12 @@ class PlanTests(unittest.TestCase):
                 spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + "\n" + sentence)
                 plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "menuitem", "name": "Save Note", "when": "always"}))
                 self.assertEqual([x for x in validate_plan(plan, spec) if "has a role" in x], [])
+        # Review finding 2: the role in a list heading on the line before, or in the sentence before.
+        for sentence in ("The header menu has these menuitems:\n- Save Note\n- Cancel", "The form has two menuitems. They are Save Note and Cancel."):
+            with self.subTest(sentence):
+                spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + "\n" + sentence)
+                plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "menuitem", "name": "Save Note", "when": "always"}))
+                self.assertEqual([x for x in validate_plan(plan, spec) if "has a role" in x], [])
         other = dataclasses.replace(self.spec, corpus=self.spec.corpus + "\nSave Note is a button. The header has a menuitem.")
         plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "menuitem", "name": "Save Note", "when": "always"}))
         self.assertEqual(len([x for x in validate_plan(plan, other) if "has a role" in x]), 1)

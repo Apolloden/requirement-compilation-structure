@@ -36,6 +36,7 @@ def _modules_for_paths(plan: dict, paths: list[str]) -> set[str]:
 def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict[str, str]:
     """All app files plus the failing test files when they fit; otherwise only the implicated ones."""
     failing_tests = {f"tests/{t.file}" for t in report.scenarios if t.status != "passed"} & set(files)
+    failing_tests |= {k for k in files if k.startswith("tests/") and any(i.startswith(k + " ") for i in report.static_issues)}
     app = {k: v for k, v in files.items() if not k.startswith("tests/")}
     chosen = {**app, **{k: files[k] for k in sorted(failing_tests)}}
     if sum(len(v) for v in chosen.values()) <= config.REPAIR_CONTEXT_CHARS:

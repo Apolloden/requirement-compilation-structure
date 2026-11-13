@@ -36,15 +36,17 @@ def _shape_problems(plan: dict) -> list[str]:
     return problems
 
 
-SENTENCE_END = re.compile(r"(?<=[.!?;])\s+|\n")
+SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
 
 
 def _role_stated(spec: Spec, role: str, name: str) -> bool:
-    """"Name"(role=x), or the role word in a sentence that also has the name ("the Save menuitem", "Save (menuitem)")."""
+    """"Name"(role=x), or the role word in the sentence that has the name or in the sentence before it
+    ("the Save menuitem", "Save (menuitem)", "these menuitems:\\n- Save")."""
     if (role, name) in spec.role_names:
         return True
     word = re.compile(rf"\b{re.escape(role)}s?\b")
-    return any(name in s and word.search(s) for s in SENTENCE_END.split(spec.corpus))
+    sentences = SENTENCE_END.split(spec.corpus)
+    return any(name in s and (word.search(s) or (i and word.search(sentences[i - 1]))) for i, s in enumerate(sentences))
 
 
 def _control_problems(where: str, controls: list[dict], spec: Spec, notes_text: str) -> list[str]:

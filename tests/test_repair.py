@@ -122,6 +122,15 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(keys, set(golden_files()))
         self.assertNotIn("tests/scenarios-1.spec.ts", set(repair_files(golden_files(), golden_plan(), self.green)))
 
+    def test_a_test_file_named_in_a_static_issue_is_sent(self):
+        # Review finding 8: a passing test that looks a name up with the wrong role was never sent, so its static
+        # issue could not be fixed and every remaining round was spent on it.
+        green = report(3)
+        green.static_issues = ['tests/scenarios-1.spec.ts looks up "Note list" as status; the plan and the requirements say region']
+        self.assertIn("tests/scenarios-1.spec.ts", repair_files(golden_files(), golden_plan(), green))
+        with mock.patch.object(config, "REPAIR_CONTEXT_CHARS", 10):
+            self.assertIn("tests/scenarios-1.spec.ts", repair_files(golden_files(), golden_plan(), green))
+
     def test_large_apps_send_only_implicated_files(self):
         plan = copy.deepcopy(golden_plan())
         plan["pages"].append({"id": "more_a", "route": "/more/:id", "title": "x", "layout": True, "module": "more",

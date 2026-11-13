@@ -124,7 +124,6 @@ ROLE_HELPERS = ("region", "navigation", "row", "listitem", "article", "group", "
                 "tab", "tabpanel", "menuitem")
 ARIA_LABEL = re.compile(r"(?<![\w-])aria-label\s*=\s*")
 TAG_START = re.compile(r"<([A-Za-z][\w.]*)")
-TAG_REST = re.compile(r"(?:=>|[^>])*>")
 EXPLICIT_ROLE = re.compile(r"(?<![\w-])role\s*=\s*(\{?)\s*([\"'`]?)([\w-]*)")
 HELPER_CALL = re.compile(rf"(?<![\w$.])({'|'.join(ROLE_HELPERS)})\(\s*[\w$.]+\s*,\s*")
 PLACEHOLDER = re.compile(r"(?<![\w-])placeholder\s*=\s*")
@@ -154,6 +153,28 @@ def _attribute_value(src: str, i: int) -> str | None:
     return None
 
 
+def _tag_end(src: str, i: int) -> int:
+    """Index after the ">" that ends the opening tag whose attributes start at src[i]; braces and quotes are skipped."""
+    depth, quote = 0, ""
+    while i < len(src):
+        c = src[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "\"'`":
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        elif c == ">" and depth <= 0:
+            return i + 1
+        i += 1
+    return len(src)
+
+
 def _rendered_roles(src: str, name: str) -> list[tuple[str, str | None]]:
     """(tag, role) for every element whose aria-label is exactly the name; role None when unknown (a component, role={x})."""
     hits = []
@@ -166,8 +187,7 @@ def _rendered_roles(src: str, name: str) -> list[tuple[str, str | None]]:
             continue
         start = starts[-1]
         tag = start.group(1)
-        rest = TAG_REST.match(src, start.end())
-        explicit = EXPLICIT_ROLE.search(src, start.end(), rest.end() if rest else len(src))
+        explicit = EXPLICIT_ROLE.search(src, start.end(), _tag_end(src, start.end()))
         if explicit:
             role = explicit.group(3) if explicit.group(2) else None
         elif tag in TAG_ROLE:
@@ -196,9 +216,8 @@ def role_issues(files: dict[str, str], controls: list[dict]) -> list[str]:
         if role not in CONTAINER_ROLES or not name:
             continue
         hits = [(key, tag, r) for key, src in frontend.items() for tag, r in _rendered_roles(src, name)]
-        known = [h for h in hits if h[2] is not None]
-        if known and not any(r == role for _, _, r in hits):
-            key, tag, rendered = known[0]
+        if hits and all(r is not None for _, _, r in hits) and not any(r == role for _, _, r in hits):
+            key, tag, rendered = hits[0]
             issues.append(f'{role} "{name}" is rendered as <{tag}> ({rendered}) in {key}; use {ADVICE[role].format(name=name)} (rule 6)')
     for key, src in files.items():
         if not (key.startswith("tests/") and key.endswith(".spec.ts")):
@@ -214,7 +233,32 @@ def role_issues(files: dict[str, str], controls: list[dict]) -> list[str]:
 
 
 # Rule 16: a menu opened on pointer enter must not be toggled by a click (evidence.md C2).
-HOVER_OPEN = re.compile(r"onMouseEnter\s*=\s*\{\s*\(\s*\w*\s*\)\s*=>\s*\{?\s*([\w$]+)\(\s*true\s*\)")
+HOVER_ATTR = re.compile(r"(?<![\w$])on(?:MouseEnter|MouseOver|PointerEnter)\s*=\s*\{")
+SET_TRUE = re.compile(r"(?<![\w$.])([\w$]+)\(\s*true\s*\)")
+COMPONENT_START = re.compile(r"^(?:export\s+(?:default\s+)?)?(?:function\s+[A-Z]|const\s+[A-Z][\w$]*\s*=)", re.M)
+HANDLER_CHARS = 400   # how much of a named handler's definition is read for setX(true)
+
+
+def _brace_end(src: str, i: int) -> int:
+    """src[i] is "{": the index after its matching "}"."""
+    depth = 0
+    for j in range(i, len(src)):
+        depth += {"{": 1, "}": -1}.get(src[j], 0)
+        if depth == 0:
+            return j + 1
+    return len(src)
+
+
+def _hover_setters(component: str, src: str) -> list[str]:
+    """Setters called with true by the pointer-enter handlers of one component (inline or a named handler in the file)."""
+    setters = []
+    for m in HOVER_ATTR.finditer(component):
+        body = component[m.end():_brace_end(component, m.end() - 1) - 1]
+        if re.fullmatch(r"\s*[\w$]+\s*", body):
+            d = re.search(rf"\b(?:const|let|var|function)\s+{re.escape(body.strip())}\b", src)
+            body = src[d.end():d.end() + HANDLER_CHARS] if d else ""
+        setters += SET_TRUE.findall(body)
+    return list(dict.fromkeys(setters))
 
 
 def _toggles(src: str, setter: str) -> bool:
@@ -226,10 +270,12 @@ def _toggles(src: str, setter: str) -> bool:
 def menu_issues(frontend: dict[str, str]) -> list[str]:
     issues = []
     for key, src in frontend.items():
-        for setter in dict.fromkeys(m.group(1) for m in HOVER_OPEN.finditer(src)):
-            if _toggles(src, setter):
-                issues.append(f"{key} opens a menu on hover and toggles it on click; a click right after the hover closes it. "
-                              f"Make the click open it ({setter}(true)) (rule 16)")
+        starts = [0] + [m.start() for m in COMPONENT_START.finditer(src)] + [len(src)]
+        components = [src[a:b] for a, b in zip(starts, starts[1:])]
+        setters = [s for c in components for s in _hover_setters(c, src) if _toggles(c, s)]
+        for setter in dict.fromkeys(setters):
+            issues.append(f"{key} opens a menu on hover and toggles it on click; a click right after the hover closes it. "
+                          f"Make the click open it ({setter}(true)) (rule 16)")
     return issues
 
 

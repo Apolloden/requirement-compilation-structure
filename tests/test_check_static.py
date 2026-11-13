@@ -182,6 +182,16 @@ class RoleCheckTests(unittest.TestCase):
         self.assertEqual(role_issues_of(files, golden_plan()),
                          ['tests/scenarios-9.spec.ts looks up "Note list" as status; the plan and the requirements say region'])
 
+    def test_greater_than_inside_an_attribute_before_the_role(self):
+        # Review finding 3: the tag scan stopped at the ">" of "n > 0" and never read role="status".
+        files = changed(SHARED, "<nav ", '<div aria-label="Saved" className={n > 0 ? "a" : "b"} role="status"></div><nav ')
+        self.assertEqual(role_issues_of(files, with_control("status", "Saved")), [])
+
+    def test_component_with_the_name_suppresses_the_report(self):
+        # Review finding 4: a component may render the planned element, so its hit keeps the check silent.
+        files = {SHARED: '<button aria-label="Cart">x</button><Panel aria-label="Cart"></Panel>'}
+        self.assertEqual(role_issues(files, [{"role": "region", "name": "Cart"}]), [])
+
     def test_role_issues_directly(self):
         files = {SHARED: '<section aria-label="Main menu"></section>'}
         self.assertEqual(len(role_issues(files, [{"role": "navigation", "name": "Main menu"}])), 1)
@@ -199,6 +209,30 @@ class MenuCheckTests(unittest.TestCase):
                 files = changed(SHARED, "<nav ", f'<div onMouseEnter={{() => {setter}(true)}}><button onClick={{() => {toggle}}}>Menu</button></div><nav ')
                 self.assertIn(f"frontend/src/shared.jsx opens a menu on hover and toggles it on click; a click right after "
                               f"the hover closes it. Make the click open it ({setter}(true)) (rule 16)", static_issues(files, golden_plan()))
+
+    def test_other_ways_to_write_a_hover_open(self):
+        # Review finding 1: common shapes of a hover menu that the first version missed.
+        problem = ("frontend/src/shared.jsx opens a menu on hover and toggles it on click; a click right after "
+                   "the hover closes it. Make the click open it (setOpen(true)) (rule 16)")
+        shapes = {
+            "bare parameter": '<div onMouseEnter={e => setOpen(true)}><button onClick={() => setOpen(o => !o)}>Menu</button></div>',
+            "statements first": '<div onMouseEnter={() => { clearTimeout(t.current); setOpen(true); }}><button onClick={() => setOpen(o => !o)}>Menu</button></div>',
+            "named handler": '<div onMouseEnter={openMenu}><button onClick={() => setOpen(o => !o)}>Menu</button></div>',
+            "pointer enter": '<div onPointerEnter={() => setOpen(true)}><button onClick={() => setOpen(o => !o)}>Menu</button></div>',
+            "mouse over": '<div onMouseOver={() => setOpen(true)}><button onClick={() => setOpen(o => !o)}>Menu</button></div>',
+        }
+        for label, jsx in shapes.items():
+            with self.subTest(label):
+                files = changed(SHARED, "export function Layout({ children }) {",
+                                "const openMenu = () => setOpen(true);\nexport function Layout({ children }) {")
+                files[SHARED] = files[SHARED].replace("<nav ", jsx + "<nav ", 1)
+                self.assertIn(problem, static_issues(files, golden_plan()))
+
+    def test_toggle_in_another_component_is_fine(self):
+        # Review finding 5: a correct hover menu and a separate click-toggled panel that reuse the setter name.
+        files = changed(SHARED, "<nav ", '<div onMouseEnter={() => setOpen(true)}><button onClick={() => setOpen(true)}>Menu</button></div><nav ')
+        files[SHARED] += "\nexport function Filters() {\n  const [open, setOpen] = useState(false);\n  return <button onClick={() => setOpen((v) => !v)}>Filters</button>;\n}\n"
+        self.assertEqual([i for i in static_issues(files, golden_plan()) if "rule 16" in i], [])
 
     def test_click_only_toggle_is_fine(self):
         files = changed(SHARED, "<nav ", '<button onClick={() => setOpen((v) => !v)}>Menu</button><nav ')
