@@ -104,6 +104,104 @@ def _name_present(name: str, sources: list[str]) -> bool:
     return any(pattern.search(src) for src in sources)
 
 
+# Rule 6: the roles named elements render, against the planned roles (evidence.md C1).
+CONTAINER_ROLES = ("navigation", "region", "article", "row", "listitem", "group", "status", "timer", "dialog", "tabpanel")
+TAG_ROLE = {"nav": "navigation", "section": "region", "article": "article", "tr": "row", "li": "listitem", "fieldset": "group",
+            "dialog": "dialog", "aside": "complementary", "header": "banner", "footer": "contentinfo", "main": "main",
+            "form": "form", "ul": "list", "ol": "list", "a": "link", "Link": "link", "NavLink": "link", "button": "button"}
+ADVICE = {"navigation": '<nav aria-label="{name}">', "region": '<section aria-label="{name}">',
+          "article": '<article aria-label="{name}">', "row": '<tr aria-label="{name}">', "listitem": '<li aria-label="{name}">',
+          "group": '<div role="group" aria-label="{name}">', "status": '<div role="status" aria-label="{name}">',
+          "timer": '<div role="timer" aria-label="{name}">', "dialog": '<div role="dialog" aria-label="{name}">',
+          "tabpanel": '<div role="tabpanel" aria-label="{name}">'}
+ROLE_HELPERS = ("region", "navigation", "row", "listitem", "article", "group", "status", "searchbox", "spinbutton",
+                "tab", "tabpanel", "menuitem")
+ARIA_LABEL = re.compile(r"(?<![\w-])aria-label\s*=\s*")
+TAG_START = re.compile(r"<([A-Za-z][\w.]*)")
+TAG_REST = re.compile(r"(?:=>|[^>])*>")
+EXPLICIT_ROLE = re.compile(r"(?<![\w-])role\s*=\s*(\{?)\s*([\"'`]?)([\w-]*)")
+HELPER_CALL = re.compile(rf"(?<![\w$.])({'|'.join(ROLE_HELPERS)})\(\s*[\w$.]+\s*,\s*")
+ESCAPE = re.compile(r"\\(.)", re.S)
+
+
+def _unescape(text: str) -> str:
+    return ESCAPE.sub(lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text)
+
+
+def _attribute_value(src: str, i: int) -> str | None:
+    """The literal value of a JSX attribute starting at src[i]: "x", 'x' (raw, as JSX reads them) or {"x"} (a JS string)."""
+    if i < len(src) and src[i] in "\"'":
+        end = src.find(src[i], i + 1)
+        return src[i + 1:end] if end > 0 else None
+    if i < len(src) and src[i] == "{":
+        j = i + 1
+        while j < len(src) and src[j].isspace():
+            j += 1
+        literal = _read_literal(src, j)
+        if literal is None or "${" in literal[0]:
+            return None
+        k = literal[1]
+        while k < len(src) and src[k].isspace():
+            k += 1
+        return _unescape(literal[0]) if k < len(src) and src[k] == "}" else None
+    return None
+
+
+def _rendered_roles(src: str, name: str) -> list[tuple[str, str | None]]:
+    """(tag, role) for every element whose aria-label is exactly the name; role None when unknown (a component, role={x})."""
+    hits = []
+    for m in ARIA_LABEL.finditer(src):
+        value = _attribute_value(src, m.end())
+        if value is None or value.strip() != name.strip():
+            continue
+        starts = list(TAG_START.finditer(src, 0, m.start()))
+        if not starts:
+            continue
+        start = starts[-1]
+        tag = start.group(1)
+        rest = TAG_REST.match(src, start.end())
+        explicit = EXPLICIT_ROLE.search(src, start.end(), rest.end() if rest else len(src))
+        if explicit:
+            role = explicit.group(3) if explicit.group(2) else None
+        elif tag in TAG_ROLE:
+            role = TAG_ROLE[tag]
+        else:
+            role = None if tag[0].isupper() else "generic"
+        hits.append((tag, role))
+    return hits
+
+
+def role_issues(files: dict[str, str], controls: list[dict]) -> list[str]:
+    """Named areas whose rendered role differs from the planned one, and our tests looking up a planned name with another role."""
+    issues = []
+    frontend = {k: v for k, v in files.items() if k.startswith("frontend/")}
+    planned: dict[str, set[str]] = {}
+    for control in controls:
+        name = str(control.get("name", "")).strip()
+        if name:
+            planned.setdefault(name, set()).add(str(control.get("role", "")))
+    for control in controls:
+        role, name = str(control.get("role", "")), str(control.get("name", "")).strip()
+        if role not in CONTAINER_ROLES or not name:
+            continue
+        hits = [(key, tag, r) for key, src in frontend.items() for tag, r in _rendered_roles(src, name)]
+        known = [h for h in hits if h[2] is not None]
+        if known and not any(r == role for _, _, r in hits):
+            key, tag, rendered = known[0]
+            issues.append(f'{role} "{name}" is rendered as <{tag}> ({rendered}) in {key}; use {ADVICE[role].format(name=name)} (rule 6)')
+    for key, src in files.items():
+        if not (key.startswith("tests/") and key.endswith(".spec.ts")):
+            continue
+        for m in HELPER_CALL.finditer(src):
+            literal = _read_literal(src, m.end())
+            if literal is None or "${" in literal[0]:
+                continue
+            name, helper = _unescape(literal[0]).strip(), m.group(1)
+            if name in planned and helper not in planned[name]:
+                issues.append(f'{key} looks up "{name}" as {helper}; the plan and the requirements say {" or ".join(sorted(planned[name]))}')
+    return list(dict.fromkeys(issues))
+
+
 def _import_allowed(spec: str, packages: frozenset) -> bool:
     return spec.startswith(("./", "../", "node:")) or spec in config.NODE_BUILTINS or spec in packages
 
@@ -156,6 +254,9 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
         name = str(control.get("name", ""))
         if name.strip() and not _name_present(name, sources):
             issues.append(f'{control.get("role")} "{name}" ({where}) does not appear in the frontend code')
+
+    # 8a: the roles named areas render, in the code and in our tests (rule 6)
+    issues += role_issues(files, [c for c, _ in named])
 
     # 8b: a layout link or button repeated inside a page file (the layout already shows it on every page)
     layout_modules = sorted({f"frontend/src/pages/{p.get('module')}.jsx" for p in pages if p.get("layout")})

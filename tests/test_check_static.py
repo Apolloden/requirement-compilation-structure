@@ -1,11 +1,12 @@
 import unittest
 
-from arcflash.check_static import backend_routes, frontend_api_calls, normalize_api_path, static_issues
+from arcflash.check_static import backend_routes, frontend_api_calls, normalize_api_path, role_issues, static_issues
 from tests.golden import golden_files, golden_plan
 
 APP = "backend/app.js"
 MAIN = "frontend/src/pages/main.jsx"
 ROUTES = "frontend/src/App.jsx"
+SHARED = "frontend/src/shared.jsx"
 
 
 def changed(key, old, new):
@@ -13,6 +14,15 @@ def changed(key, old, new):
     assert old in files[key], (key, old)
     files[key] = files[key].replace(old, new)
     return files
+
+
+def with_control(role, name):
+    plan = golden_plan(); plan["layout"]["controls"].append({"role": role, "name": name, "when": "always"})
+    return plan
+
+
+def role_issues_of(files, plan):
+    return [i for i in static_issues(files, plan) if "(rule 6)" in i or " looks up " in i]
 
 
 class StaticCheckTests(unittest.TestCase):
@@ -110,6 +120,60 @@ class StaticCheckTests(unittest.TestCase):
         self.assertIn('button "下一步" (page notes) does not appear in the frontend code', static_issues(golden_files(), plan))
         files = golden_files(); files["frontend/src/pages/main.jsx"] += "\nconst label = \"下一步\";\n"
         self.assertNotIn('button "下一步" (page notes) does not appear in the frontend code', static_issues(files, plan))
+
+
+class RoleCheckTests(unittest.TestCase):
+    # evidence.md C1: "Global navigation"(role=navigation) was planned right but rendered as <section aria-label>, a region,
+    # and our own test looked it up as a region too.
+    def test_named_element_with_the_wrong_role(self):
+        files = changed(SHARED, "<nav ", '<section aria-label="Main menu" ')   # a text check does not care that </nav> stays
+        self.assertIn('navigation "Main menu" is rendered as <section> (region) in frontend/src/shared.jsx; '
+                      'use <nav aria-label="Main menu"> (rule 6)', static_issues(files, with_control("navigation", "Main menu")))
+
+    def test_right_role_is_clean(self):
+        files = changed(SHARED, "<nav ", '<nav aria-label="Main menu" ')
+        self.assertEqual(role_issues_of(files, with_control("navigation", "Main menu")), [])
+
+    def test_tests_look_up_a_planned_name_with_another_role(self):
+        files = changed(SHARED, "<nav ", '<nav aria-label="Main menu" ')
+        files["tests/scenarios-9.spec.ts"] = 'await expect(region(page, "Main menu")).toBeVisible();\n'
+        self.assertIn('tests/scenarios-9.spec.ts looks up "Main menu" as region; the plan and the requirements say navigation',
+                      static_issues(files, with_control("navigation", "Main menu")))
+
+    def test_literal_expression_and_special_characters(self):
+        name = 'Record "A" [x-w0] (1)'
+        files = changed(SHARED, "<nav ", '<ul><li aria-label={"Record \\"A\\" [x-w0] (1)"}>A</li></ul><nav ')
+        self.assertEqual(role_issues_of(files, with_control("listitem", name)), [])
+        wrong = changed(SHARED, "<nav ", '<div aria-label={"Record \\"A\\" [x-w0] (1)"}>A</div><nav ')
+        self.assertEqual(len(role_issues_of(wrong, with_control("listitem", name))), 1)
+
+    def test_same_name_two_roles_is_fine(self):
+        plan = with_control("region", "Add note"); plan["layout"]["controls"].append({"role": "button", "name": "Add note", "when": "always"})
+        files = changed(SHARED, "<nav ", '<button>Add note</button><section aria-label="Add note"></section><nav ')
+        self.assertEqual(role_issues_of(files, plan), [])
+
+    def test_explicit_role_attribute_decides(self):
+        files = changed(SHARED, "<nav ", '<div role="status" aria-label="Saved" ></div><nav ')
+        self.assertEqual(role_issues_of(files, with_control("status", "Saved")), [])
+        self.assertEqual(role_issues_of(files, with_control("timer", "Saved")),
+                         ['timer "Saved" is rendered as <div> (status) in frontend/src/shared.jsx; use <div role="timer" aria-label="Saved"> (rule 6)'])
+
+    def test_role_written_after_the_label_counts(self):
+        files = changed(SHARED, "<nav ", '<div aria-label="Saved" role="status"></div><nav ')
+        self.assertEqual(role_issues_of(files, with_control("status", "Saved")), [])
+
+    def test_method_named_like_a_helper_is_not_a_lookup(self):
+        files = golden_files(); files["tests/scenarios-9.spec.ts"] = 'await response.status(page, "Note list");\n'
+        self.assertEqual(role_issues_of(files, golden_plan()), [])
+        files["tests/scenarios-9.spec.ts"] = 'await expect(status(page, "Note list")).toBeVisible();\n'
+        self.assertEqual(role_issues_of(files, golden_plan()),
+                         ['tests/scenarios-9.spec.ts looks up "Note list" as status; the plan and the requirements say region'])
+
+    def test_role_issues_directly(self):
+        files = {SHARED: '<section aria-label="Main menu"></section>'}
+        self.assertEqual(len(role_issues(files, [{"role": "navigation", "name": "Main menu"}])), 1)
+        self.assertEqual(role_issues(files, [{"role": "region", "name": "Main menu"}]), [])
+        self.assertEqual(role_issues(files, [{"role": "navigation", "name": "Elsewhere"}]), [])   # no hit: rule 8's problem
 
 
 if __name__ == "__main__":
