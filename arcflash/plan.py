@@ -11,6 +11,8 @@ from arcflash.spec import Spec
 SNAKE = re.compile(r"[a-z][a-z0-9_]*")
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 ATTEMPTS = 3
+# Interactive roles a grader looks up only when the requirements state them (evidence.md C2: unstated menuitems).
+STATED_ONLY_ROLES = frozenset({"menuitem", "menuitemcheckbox", "menuitemradio", "option", "tab", "switch", "treeitem"})
 
 
 class PlanError(RuntimeError):
@@ -34,6 +36,17 @@ def _shape_problems(plan: dict) -> list[str]:
     return problems
 
 
+SENTENCE_END = re.compile(r"(?<=[.!?;])\s+|\n")
+
+
+def _role_stated(spec: Spec, role: str, name: str) -> bool:
+    """"Name"(role=x), or the role word in a sentence that also has the name ("the Save menuitem", "Save (menuitem)")."""
+    if (role, name) in spec.role_names:
+        return True
+    word = re.compile(rf"\b{re.escape(role)}s?\b")
+    return any(name in s and word.search(s) for s in SENTENCE_END.split(spec.corpus))
+
+
 def _control_problems(where: str, controls: list[dict], spec: Spec, notes_text: str) -> list[str]:
     problems = []
     for c in controls:
@@ -46,6 +59,9 @@ def _control_problems(where: str, controls: list[dict], spec: Spec, notes_text: 
             continue   # an element the text knows only by its role, such as an error with role=alert
         elif not name.strip() or (name not in spec.corpus and name not in notes_text):
             problems.append(f'{where}: control name "{name}" is not in the requirements or screenshot notes; copy names exactly')
+        if role in STATED_ONLY_ROLES and name.strip() and not _role_stated(spec, role, name):
+            problems.append(f'{where}: {role} "{name}" has a role the requirements do not state; '
+                            'an action they name without a role is a link or a button')
     return problems
 
 

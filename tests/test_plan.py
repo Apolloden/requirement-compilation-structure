@@ -1,4 +1,5 @@
 import copy
+import dataclasses
 import json
 import shutil
 import tempfile
@@ -94,6 +95,31 @@ class PlanTests(unittest.TestCase):
         plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "alert", "name": "", "when": "after a failed save"}))
         self.assertEqual(validate_plan(plan, self.spec), [])
         self.assertIn('"name": ""', load_prompt("plan"))
+
+    def test_unstated_interactive_role(self):
+        # evidence.md C2: the plan typed account-menu entries as menuitem although the spec gave them no role, so a
+        # button-or-link lookup never found them.
+        problem = 'page notes: menuitem "Notes" has a role the requirements do not state; an action they name without a role is a link or a button'
+        plan = mutated(lambda p: page(p, "notes")["controls"].append({"role": "menuitem", "name": "Notes", "when": "always"}))
+        self.assertIn(problem, validate_plan(plan, self.spec))
+        stated = dataclasses.replace(self.spec, role_names=self.spec.role_names + [("menuitem", "Notes")])
+        self.assertNotIn(problem, validate_plan(plan, stated))
+        tab = mutated(lambda p: page(p, "notes")["controls"].append({"role": "tab", "name": "Note list", "when": "always"}))
+        self.assertIn('page notes: tab "Note list" has a role the requirements do not state; an action they name without a role '
+                      'is a link or a button', validate_plan(tab, self.spec))
+
+    def test_role_stated_in_prose_counts(self):
+        # Seen in the graded Ctrip spec: "reveals the Log out menuitem", "activate Log out (menuitem)", "the GHIJ tab",
+        # "Pending, In progress, Completed lifecycle tabs". The same sentence names the control and its role.
+        for sentence in ("Hovering the header reveals the Save Note menuitem.", "Then activate Save Note (menuitem).",
+                         "Save Note, Cancel and Delete are menuitems."):
+            with self.subTest(sentence):
+                spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + "\n" + sentence)
+                plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "menuitem", "name": "Save Note", "when": "always"}))
+                self.assertEqual([x for x in validate_plan(plan, spec) if "has a role" in x], [])
+        other = dataclasses.replace(self.spec, corpus=self.spec.corpus + "\nSave Note is a button. The header has a menuitem.")
+        plan = mutated(lambda p: page(p, "note_new")["controls"].append({"role": "menuitem", "name": "Save Note", "when": "always"}))
+        self.assertEqual(len([x for x in validate_plan(plan, other) if "has a role" in x]), 1)
 
     def test_names_from_screenshot_notes_are_accepted(self):
         plan = mutated(lambda p: page(p, "notes")["controls"].append({"role": "button", "name": "Sort by date", "when": "always"}))

@@ -176,5 +176,30 @@ class RoleCheckTests(unittest.TestCase):
         self.assertEqual(role_issues(files, [{"role": "navigation", "name": "Elsewhere"}]), [])   # no hit: rule 8's problem
 
 
+class MenuCheckTests(unittest.TestCase):
+    # evidence.md C2: the menu opened on mouse enter and toggled on click; Playwright's click() moves the mouse first
+    # (opens it), then clicks (closes it), so no menu entry was ever found.
+    def test_hover_menu_that_click_toggles(self):
+        for setter, toggle in (("setOpen", "setOpen((v) => !v)"), ("setMenuOpen", "setMenuOpen(o => !o)"),
+                               ("setOpen", "setOpen((prev) => !prev)")):
+            with self.subTest(toggle):
+                files = changed(SHARED, "<nav ", f'<div onMouseEnter={{() => {setter}(true)}}><button onClick={{() => {toggle}}}>Menu</button></div><nav ')
+                self.assertIn(f"frontend/src/shared.jsx opens a menu on hover and toggles it on click; a click right after "
+                              f"the hover closes it. Make the click open it ({setter}(true)) (rule 16)", static_issues(files, golden_plan()))
+
+    def test_click_only_toggle_is_fine(self):
+        files = changed(SHARED, "<nav ", '<button onClick={() => setOpen((v) => !v)}>Menu</button><nav ')
+        self.assertEqual([i for i in static_issues(files, golden_plan()) if "rule 16" in i], [])
+
+    def test_hover_and_click_that_open_are_fine(self):
+        files = changed(SHARED, "<nav ", '<div onMouseEnter={() => setOpen(true)}><button onClick={() => setOpen(true)}>Menu</button></div><nav ')
+        self.assertEqual([i for i in static_issues(files, golden_plan()) if "rule 16" in i], [])
+
+    def test_toggle_by_negating_the_state(self):
+        files = changed(SHARED, "<nav ", '<div onMouseEnter={() => setOpen(true)}><button onClick={() => setOpen(!open)}>Menu</button></div><nav ')
+        self.assertIn("frontend/src/shared.jsx opens a menu on hover and toggles it on click; a click right after "
+                      "the hover closes it. Make the click open it (setOpen(true)) (rule 16)", static_issues(files, golden_plan()))
+
+
 if __name__ == "__main__":
     unittest.main()

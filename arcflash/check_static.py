@@ -202,6 +202,26 @@ def role_issues(files: dict[str, str], controls: list[dict]) -> list[str]:
     return list(dict.fromkeys(issues))
 
 
+# Rule 16: a menu opened on pointer enter must not be toggled by a click (evidence.md C2).
+HOVER_OPEN = re.compile(r"onMouseEnter\s*=\s*\{\s*\(\s*\w*\s*\)\s*=>\s*\{?\s*([\w$]+)\(\s*true\s*\)")
+
+
+def _toggles(src: str, setter: str) -> bool:
+    """setter(v => !v), setter((v) => !v) or setter(!state)."""
+    s = re.escape(setter)
+    return bool(re.search(rf"(?<![\w$.]){s}\(\s*(?:\(?\s*([\w$]+)\s*\)?\s*=>\s*!\s*\1\b|![\w$.]+\s*\))", src))
+
+
+def menu_issues(frontend: dict[str, str]) -> list[str]:
+    issues = []
+    for key, src in frontend.items():
+        for setter in dict.fromkeys(m.group(1) for m in HOVER_OPEN.finditer(src)):
+            if _toggles(src, setter):
+                issues.append(f"{key} opens a menu on hover and toggles it on click; a click right after the hover closes it. "
+                              f"Make the click open it ({setter}(true)) (rule 16)")
+    return issues
+
+
 def _import_allowed(spec: str, packages: frozenset) -> bool:
     return spec.startswith(("./", "../", "node:")) or spec in config.NODE_BUILTINS or spec in packages
 
@@ -268,6 +288,9 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
         for key in layout_modules:
             if key in files and tag.search(files[key]):
                 issues.append(f'{key} repeats the layout {control["role"]} "{name}"; the layout already shows it on every page (rule 5)')
+
+    # 8c: hover menus that a click closes (rule 16)
+    issues += menu_issues(frontend)
 
     # 9-11: browser dialogs, input types and imports
     for key, src in frontend.items():
