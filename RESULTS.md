@@ -22,6 +22,7 @@ ARC-Bench run of 2026-11-13, archive `arcflash-2026-11-13-v2.zip`, runtime `pyth
 ## Notes
 
 - Score = pass rate divided by a cost factor. Pass rate dominates, so the 0 % on PrestaShop costs more than any saving elsewhere.
-- PrestaShop passed 0 of its tests even though the run used 24 minutes and 2.36 M tokens. The cause has not been found yet (the app may not have started, or every test may have failed); it is the first thing to look at in the run download.
+- PrestaShop passed 0 of its tests even though the run used 24 minutes and 2.36 M tokens. Cause (found in the run download): the global navigation was rendered as a region, not a `<nav>`, and the grader checks it at the start of every test. Analysis of all three downloaded runs: `docs/4-arcflash-update/evidence.md` in the course project folder.
+- The update on branch `arcflash-update` (change log `docs/3-arcflash/arcflash-changes.md`, "ArcFlash update") was checked locally with grader-style suites: BookStack 29 → 35 of 35, PrestaShop 0 → 20 of 21, Ctrip 8 → 8 of 18 (the menu chain fixed, two other spots broke on that run). Not yet graded on ARC-Bench.
 - For comparison, the unchanged upstream agent got 4 of 35 tests (11.4 %) on BookStack, and the earlier ArcFable work was only checked locally.
 - Local grader-style tests on the BookStack lite task were 12 / 12 for this agent before the run, with an estimated cost of about ¥0.20 and 10 minutes.
