@@ -195,20 +195,39 @@ def _parse(text: str) -> dict:
 
 
 def settle_modules(plan: dict) -> None:
-    """Make each page's "module" agree with the module lists, in place: the list wins (code generation reads the
-    lists); a page that no list has joins the module it names if that module has room. Saves a full plan-fix call
-    (v4 plan R6), and the checks that read page["module"] see what code generation reads."""
+    """Make the module lists and each page's "module" agree, in place, without a model call (v4 plan R6):
+    the list wins; a page that no list has joins the module it names; a module over MAX_PAGES_PER_MODULE is split
+    in list order into new modules ("main", "main_2", ...). Code generation reads the lists, the checks and the repair
+    file choice read page["module"]; after this both say the same."""
     if not isinstance(plan.get("pages"), list) or not isinstance(plan.get("modules"), list):
         return
     modules = {m["id"]: m for m in _dicts(plan["modules"]) if isinstance(m.get("id"), str) and isinstance(m.get("pages"), list)}
     for page in _dicts(plan["pages"]):
         pid = page.get("id")
         owners = [mid for mid, m in modules.items() if pid in m["pages"]]
-        if len(owners) == 1:
-            page["module"] = owners[0]
-        elif (not owners and page.get("module") in modules
-              and len(modules[page["module"]]["pages"]) < config.MAX_PAGES_PER_MODULE):   # never overfill: that is a problem too
+        if not owners and page.get("module") in modules:
             modules[page["module"]]["pages"].append(pid)
+    taken = {m.get("id") for m in _dicts(plan["modules"])}
+    settled = []
+    for module in plan["modules"]:
+        settled.append(module)
+        if not (isinstance(module, dict) and module.get("id") in modules):
+            continue
+        listed, size, n = module["pages"], config.MAX_PAGES_PER_MODULE, 1
+        module["pages"] = listed[:size]
+        for start in range(size, len(listed), size):
+            while f"{module['id']}_{n}" in taken or n == 1:
+                n += 1
+            taken.add(f"{module['id']}_{n}")
+            settled.append({"id": f"{module['id']}_{n}", "pages": listed[start:start + size]})
+    plan["modules"] = settled
+    owner = {}
+    for module in _dicts(settled):
+        for pid in module.get("pages", []) if isinstance(module.get("pages"), list) else []:
+            owner.setdefault(pid, []).append(module.get("id"))
+    for page in _dicts(plan["pages"]):
+        if len(owner.get(page.get("id"), [])) == 1:
+            page["module"] = owner[page["id"]][0]
 
 
 def _parses(text: str) -> bool:

@@ -166,12 +166,21 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(page(plan, "note")["module"], module)
                 self.assertIn("note", next(m for m in plan["modules"] if m["id"] == module)["pages"])
 
-    def test_an_orphan_does_not_overfill_its_module(self):
-        plan = mutated(nine_pages)                              # "main" lists 9 pages: one too many already
-        plan["modules"][0]["pages"].remove("note")              # now 8, and "note" is in no list
+    def test_an_overfull_module_is_split_in_list_order(self):
+        # v3 12306: one module "main" with 19 pages reached code generation (13 problems left after the fix rounds);
+        # one frontend call wrote all 19 pages and the first check fell from 49 (v2) to 28 of 142.
+        plan = mutated(nine_pages)                              # "main" lists 9 pages
+        plan["modules"][0]["pages"].remove("note")              # 8 listed, "note" in no list but names "main"
+        plan["modules"].append({"id": "main_2", "pages": []})   # an id already taken is skipped
+        listed = [p for p in plan["modules"][0]["pages"]] + ["note"]
         settle_modules(plan)
-        self.assertNotIn("note", plan["modules"][0]["pages"])   # joining would make 9 > MAX_PAGES_PER_MODULE
-        self.assertIn("modules: page note is in no module", validate_plan(plan, self.spec))
+        ids = [m["id"] for m in plan["modules"]]
+        self.assertEqual(ids, ["main", "main_3", "main_2"])                                     # a chunk follows its module
+        self.assertEqual(plan["modules"][0]["pages"] + plan["modules"][1]["pages"], listed)   # list order kept
+        self.assertEqual(len(plan["modules"][0]["pages"]), config.MAX_PAGES_PER_MODULE)
+        self.assertEqual(page(plan, "note")["module"], "main_3")
+        problems = validate_plan(plan, self.spec)
+        self.assertFalse([p for p in problems if "module" in p or "pages;" in p], problems)
 
     def test_problems_are_sent_back(self):
         plan_without_req_1_3 = mutated(without_req_1_3)
