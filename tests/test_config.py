@@ -13,7 +13,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_limits(self):
         self.assertEqual((config.MAX_REPAIR_ROUNDS, config.MAX_ATTEMPTS, config.MAX_PARALLEL_CALLS, config.FOCUS_GROUPS), (6, 2, 4, 3))
-        self.assertEqual(set(config.MAX_TOKENS), {"vision", "plan", "backend", "frontend", "tests", "repair"})
+        self.assertEqual(set(config.MAX_TOKENS), {"vision", "plan", "backend", "frontend", "tests", "repair", "quick_fix"})
         self.assertEqual(config.RETRY_WAITS, (15, 30, 60, 120))
         self.assertIn("radiogroup", config.ARIA_ROLES)
 

@@ -108,6 +108,40 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(config.MAX_TOKENS["repair"], 8000)
         self.assertEqual((llm.calls[0]["continue_cut"], type(llm.calls[0]["stop_when"])), (False, RepeatGuard))
 
+    def test_a_build_failure_gets_a_quick_fix_with_only_the_error_and_its_lines(self):
+        # v4 Stack Overflow: one missing "}" got a full repair round of 36k tokens and 34 minutes (evidence.md 2.6).
+        page = "frontend/src/pages/x.jsx"
+        self.ws.write({page: "".join(f"const line{n} = {n};\n" for n in range(1, 201))})
+        log = "".join(f"log line {n}\n" for n in range(1, 81)) + "file: /work/frontend/src/pages/x.jsx:120:5\nERROR: Expected \"}\"\n"
+        broken = report(0, built=False, booted=False); broken.build_log = log
+        llm = FakeLLM({"quick_fix:": [edit(page, "const line120 = 120;", "const line120 = 121;")]})
+        best, snap = self.run_loop(llm, [self.green], first=broken)
+        self.assertEqual(snap.name, "a1-r1")
+        c = llm.calls[0]
+        self.assertEqual((c["purpose"], c["max_tokens"], config.MAX_TOKENS["quick_fix"]), ("quick_fix:a1.1", 2000, 2000))
+        self.assertTrue(c["user"].startswith("CTX\n\nTask: the application does not build."))
+        self.assertIn("log line 43\n", c["user"]); self.assertNotIn("log line 42\n", c["user"])   # the last 40 log lines
+        self.assertIn(f"=== {page}, lines 80 to 160 ===\n  80 | const line80 = 80;\n", c["user"])
+        self.assertIn(" 160 | const line160 = 160;", c["user"]); self.assertNotIn("const line161 =", c["user"])
+        self.assertNotIn("const line79 =", c["user"]); self.assertNotIn("=== backend/app.js", c["user"])
+        self.assertEqual((c["continue_cut"], type(c["stop_when"]).__name__), (False, "RepeatGuard"))
+        self.assertIn("const line120 = 121;", (self.ws.out / page).read_text())
+
+    def test_a_start_failure_gets_a_quick_fix_around_the_backend_line(self):
+        down = report(0, built=True, booted=False)
+        down.boot_log = "Error: boom\n    at Object.<anonymous> (/work/backend/app.js:3:9)\n"
+        llm = FakeLLM({"quick_fix:": ["no blocks"], "repair:": ["no blocks"]})
+        self.run_loop(llm, [], first=down)
+        c = llm.calls[0]
+        self.assertTrue(c["user"].startswith("CTX\n\nTask: the application builds but the server does not start."))
+        self.assertIn("=== backend/app.js, lines 1 to ", c["user"]); self.assertIn("Error: boom", c["user"])
+
+    def test_a_build_log_without_a_line_gets_a_normal_round(self):
+        broken = report(0, built=False, booted=False); broken.build_log = "something failed\n"
+        llm = FakeLLM({"repair:": ["no blocks", "no blocks"]})
+        self.run_loop(llm, [], first=broken)
+        self.assertEqual(llm.calls[0]["purpose"], "repair:a1.1")
+
     def test_budget_stops_repairs(self):
         llm = FakeLLM({})
         self.run_loop(llm, [], budget=False); self.assertEqual(llm.calls, [])

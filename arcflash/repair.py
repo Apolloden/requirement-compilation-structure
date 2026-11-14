@@ -33,6 +33,7 @@ def _modules_for_paths(plan: dict, paths: list[str]) -> set[str]:
     return owners
 
 
+LOG_PLACE = re.compile(r"((?:frontend/)?src/[\w/.-]+\.jsx?|backend/app\.js):(\d+)")
 PAGE_NAMED = re.compile(r"\(page ([a-z][a-z0-9_]*)\)")
 
 
@@ -69,6 +70,37 @@ def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict
     return {k: files[k] for k in files if k in keys}
 
 
+def quick_fix_task(files: dict[str, str], report: CheckReport) -> str | None:
+    """For an app that does not build (or builds but does not start): the log tail and the lines around each place it
+    names (file:line). None when the log names no generated file; the round is then a normal one (Task 5)."""
+    if report.built and report.booted:
+        return None
+    what, log = ("build", report.build_log) if not report.built else ("start", report.boot_log)
+    places = []
+    for m in LOG_PLACE.finditer(log):
+        path = m.group(1) if m.group(1).startswith(("frontend/", "backend/")) else "frontend/" + m.group(1)
+        if path in files and (path, int(m.group(2))) not in places:
+            places.append((path, int(m.group(2))))
+        if what == "start" and places:
+            break   # the first place in a start log is where the server threw
+    if not places:
+        return None
+    n = config.QUICK_FIX_LOG_LINES
+    code = []
+    for path, line in places:
+        lines = files[path].splitlines()
+        start, end = max(1, line - n), min(len(lines), line + n)
+        code.append(f"=== {path}, lines {start} to {end} ===\n"
+                    + "".join(f"{k:4d} | {lines[k - 1]}\n" for k in range(start, end + 1)))
+    return fill(load_prompt("quick_fix"), what="the application does not build." if what == "build"
+                else "the application builds but the server does not start.",
+                log=proc_tail(log, n), code="\n".join(code).rstrip("\n"))
+
+
+def proc_tail(text: str, lines: int) -> str:
+    return "\n".join(text.rstrip("\n").splitlines()[-lines:])
+
+
 def shows_pages(report: CheckReport) -> bool:
     """The server started and at least one page rendered (a frontend that crashes at render fails every smoke test)."""
     return report.booted and not (report.smoke and report.smoke_passed == 0)
@@ -101,19 +133,23 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
     A booted app needs budget kind "repair"; one that does not start needs only "rescue"."""
     system = load_prompt("rules")
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
-    note, without_gain = "", 0
+    note, without_gain, quick_tried = "", 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
     for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
         kind = "repair" if shows_pages(best) else "rescue"
         if best.all_green() or without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN or not budget.allows(kind):
             break
         files = ws.read_generated()
-        purpose = f"repair:{label}.{n}"
-        tests = {k.removeprefix("tests/"): v for k, v in files.items() if k.startswith("tests/")}
-        task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
-                    problems=best.to_prompt(test_files=tests))
+        quick = None if quick_tried else quick_fix_task(files, best)
+        if quick is not None:   # a build or start error with a named line: a 2k-token fix, not a full round (E6)
+            purpose, task, tokens, quick_tried = f"quick_fix:{label}.{n}", quick, config.MAX_TOKENS["quick_fix"], True
+        else:
+            purpose, tokens = f"repair:{label}.{n}", config.MAX_TOKENS["repair"]
+            tests = {k.removeprefix("tests/"): v for k, v in files.items() if k.startswith("tests/")}
+            task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
+                        problems=best.to_prompt(test_files=tests))
         try:
-            answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=config.MAX_TOKENS["repair"],
+            answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
                                        stop_when=RepeatGuard(), continue_cut=False)
             new = _apply(llm, purpose, system, context, files, answer.text)
         except LLMError:
@@ -125,7 +161,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         report = check()
         snapshot = ws.snapshot(f"{label}-r{n}", _meta(f"{label}-r{n}", report))
         if report.rank() > best.rank():
-            best, best_snapshot, note, without_gain = report, snapshot, "", 0
+            best, best_snapshot, note, without_gain, quick_tried = report, snapshot, "", 0, False
         else:
             ws.restore(best_snapshot)
             note, without_gain = WORSE_NOTE, without_gain + 1

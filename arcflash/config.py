@@ -6,7 +6,8 @@ TEMPERATURE = 0.2
 RESTART_TEMPERATURE = 0.6
 MAX_PARALLEL_CALLS = 4
 MAX_BACKGROUND_CALLS = 2     # the test writer's own slots: it never delays notes, plan, code or repairs
-MAX_TOKENS = {"vision": 800, "plan": 24000, "backend": 32000, "frontend": 32000, "tests": 16000, "repair": 8000}
+MAX_TOKENS = {"vision": 800, "plan": 24000, "backend": 32000, "frontend": 32000, "tests": 16000, "repair": 8000,
+              "quick_fix": 2000}
 MAX_CONTINUATIONS = 2
 REPEAT_GUARD_PAIRS = 8          # a repair answer stops after this many no-op or repeated SEARCH/REPLACE pairs in a row
 RETRY_WAITS = (15, 30, 60, 120)
@@ -17,6 +18,7 @@ RUNAWAY_NUMBER_RUN = 300     # an answer ending in this many comma-separated int
 CONTINUE_PROMPT = "Continue exactly where your previous answer stopped. Output only the continuation, without repeating anything."
 RUNAWAY_PROMPT = "Your previous answer turned into blank or repeated text. Answer again, briefly and completely."
 MAX_REPAIR_ROUNDS = 6           # short aimed rounds (8k tokens, three failure groups each)
+QUICK_FIX_LOG_LINES = 40         # a build or start failure: the log tail and this many lines on each side of a named line
 FOCUS_GROUPS = 3                # failure groups a repair round shows in full, largest first
 MAX_ROUNDS_WITHOUT_GAIN = 2
 MAX_ATTEMPTS = 2

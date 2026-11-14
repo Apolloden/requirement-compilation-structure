@@ -9,7 +9,7 @@ from arcflash.spec import Spec
 
 PROMPTS = Path(__file__).resolve().parent / "prompts"
 PROMPT_NAMES = ("rules", "plan", "plan_fix", "backend", "frontend_first", "frontend_more", "missing_files", "kept_files", "tests",
-                "repair", "edit_fix", "vision")
+                "repair", "edit_fix", "vision", "quick_fix")
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 UNAVAILABLE = "(screenshot unavailable)"
 
