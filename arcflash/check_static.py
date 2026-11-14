@@ -472,7 +472,9 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
         tag = re.compile(rf"<({CONTROL_TAGS[control['role']]})\b(?:=>|[^>])*>\s*{re.escape(name)}\s*</\1>")
         for key in layout_modules:
             if key in files and tag.search(files[key]):
-                issues.append(f'{key} repeats the layout {control["role"]} "{name}"; the layout already shows it on every page (rule 5)')
+                issues.append(f'{key} repeats the layout {control["role"]} "{name}"; a screen shows it once unless the requirement '
+                              'acts on it inside a named form or region: remove a repeat (a breadcrumb), or keep a form\'s own '
+                              'control and hide the layout\'s one on that page (rule 5)')
 
     # 8b2: controls planned inside a named area are rendered inside it (Task 6b)
     issues += area_issues(files, plan)
