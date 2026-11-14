@@ -196,6 +196,41 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(len([c for c in llm.calls if c["purpose"].startswith("vision:")]), 1)
         self.assertEqual((self.out / ".arc/harness/tests/scenarios-1.spec.ts").read_text(), golden_files()[TESTS])
 
+    def test_the_plan_starts_before_the_notes_finish(self):
+        # v4: notes took 7 to 15 min per site on a slow day and the plan waited for all of them (evidence.md E5).
+        import threading, time as _time
+        events = []
+        class SlowVision(type(golden_llm())):
+            def describe_image(self, *args, **kwargs):
+                _time.sleep(0.3)
+                answer = super().describe_image(*args, **kwargs)
+                events.append(("vision end", _time.monotonic()))
+                return answer
+            def complete_long(self, purpose, *args, **kwargs):
+                events.append((purpose, _time.monotonic()))
+                return super().complete_long(purpose, *args, **kwargs)
+        llm = golden_llm(); llm.__class__ = SlowVision
+        self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[GREEN]))
+        times = dict(events)
+        self.assertLess(times["plan"], times["vision end"])
+        self.assertGreater(times["backend"], times["vision end"])              # code waits for the notes
+        plan_call = next(c for c in llm.calls if c["purpose"] == "plan")
+        self.assertNotIn("SCREENSHOT NOTES", plan_call["user"])
+        self.assertIn("Layout: a list of notes.", next(c for c in llm.calls if c["purpose"] == "backend")["user"])
+
+    def test_code_uses_the_notes_that_exist_after_the_wait(self):
+        import time as _time
+        class NeverDone(type(golden_llm())):
+            def describe_image(self, *args, **kwargs):
+                _time.sleep(0.5)
+                return super().describe_image(*args, **kwargs)
+        llm = golden_llm(); llm.__class__ = NeverDone
+        with mock.patch.object(config, "NOTES_WAIT_SECONDS", 0.05):
+            result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[GREEN]))
+        self.assertEqual(result["shipped"]["source"], "a1-r0")
+        backend = next(c for c in llm.calls if c["purpose"] == "backend")["user"]
+        self.assertIn("(screenshot unavailable)", backend); self.assertNotIn("Layout: a list of notes.", backend)
+
     def test_failed_install_ships_the_unchecked_app(self):
         t = tools(install_rc=1)
         result = self.run_quiet(NOTES, self.out, llm=golden_llm(), tools=t)

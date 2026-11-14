@@ -46,11 +46,17 @@ def _describe(path: str, req_dir: Path, llm) -> str:
     return answer.text.strip() or UNAVAILABLE
 
 
-def describe_images(spec: Spec, req_dir: Path, llm) -> dict[str, str]:
-    """Image path → note, one call per distinct image."""
+def describe_images(spec: Spec, req_dir: Path, llm, into: dict | None = None) -> dict[str, str]:
+    """Image path → note, one call per distinct image. `into` receives each note as soon as it exists, so a caller that
+    stops waiting can use the notes that are done (Task 9)."""
     paths = [image.path for image in spec.images]
+    notes = into if into is not None else {}
     if not paths:
-        return {}
+        return notes
+
+    def one(path: str) -> None:
+        notes[path] = _describe(path, req_dir, llm)
+
     with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_CALLS) as pool:
-        notes = list(pool.map(lambda p: _describe(p, req_dir, llm), paths))
-    return dict(zip(paths, notes))
+        list(pool.map(one, paths))
+    return {p: notes[p] for p in paths}

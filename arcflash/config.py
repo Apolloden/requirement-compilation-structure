@@ -30,6 +30,7 @@ RESCUE_UNTIL_SECONDS = 180 * 60  # an app that does not start still gets repair 
 # 1,200 s). Under the 370 min ArcFable BookStack ran on ARC-Bench.
 HARD_STOP_SECONDS = 240 * 60
 REPAIR_RESERVE_SECONDS = 4 * 60
+NOTES_WAIT_SECONDS = 300         # code generation waits at most this long (from the notes' start) for screenshot notes
 ATTEMPT_RESERVE_SECONDS = 15 * 60
 MIN_RUN_COST_CNY = 2.0
 COST_PER_SCENARIO_CNY = 0.05

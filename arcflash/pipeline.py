@@ -1,4 +1,5 @@
-"""The ArcFlash flow: read → tests and screenshot notes → plan → code → check → repair → restart once → ship."""
+"""The ArcLaser flow: read → tests and screenshot notes in the background, plan at once → code (with the notes) →
+check → repair → restart once → ship."""
 from __future__ import annotations
 
 import json
@@ -189,15 +190,16 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
     """Steps 2 to 6; every checked version is added to state["versions"] as soon as it exists."""
     budget = Budget(llm.usage, len(spec.scenarios), clock=clock)
     versions: list[tuple[CheckReport, Path]] = state["versions"]
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        # 2-3. background installs and the independent tests; screenshot notes in this thread
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        # 2-3. background installs, the independent tests and the screenshot notes; the plan does not wait for the notes
         install_future = pool.submit(tools.install_app, ws)
         harness_future = pool.submit(tools.prepare_harness, ws.out)
         tests_future = pool.submit(write_tests, spec, llm)
-        _say("installing packages and writing tests in the background")
-        notes = describe_images(spec, req_dir, llm)
-        ws.save_json("notes.json", notes)
-        notes_text = notes_block(spec, notes)
+        notes: dict[str, str] = {}
+        notes_started = clock()
+        notes_future = pool.submit(describe_images, spec, req_dir, llm, notes)
+        _say("installing packages, writing tests and screenshot notes in the background")
+        notes_text: str | None = None
         tests: dict[str, str] | None = None
 
         # 4-6. attempts
@@ -216,8 +218,16 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             attempt_started = clock()
             try:
                 _say(f"attempt {n}: plan")
-                plan, attempt["plan_problems"] = make_plan(spec, notes_text, llm, temperature=temperature)
+                plan, attempt["plan_problems"] = make_plan(spec, "", llm, temperature=temperature)
                 ws.save_json(f"plan-{n}.json", plan)
+                if notes_text is None:   # code uses the layout hints of the notes: wait for them, at most NOTES_WAIT_SECONDS
+                    try:
+                        notes_future.result(timeout=max(0.0, config.NOTES_WAIT_SECONDS - (clock() - notes_started)))
+                    except Exception:
+                        _say("screenshot notes not complete; code generation goes on with the notes that exist")
+                    done = dict(notes)
+                    ws.save_json("notes.json", done)
+                    notes_text = notes_block(spec, done)
                 _say(f"attempt {n}: backend and frontend")
                 files, attempt["generation_problems"] = generate_app(spec, notes_text, plan, llm, temperature=temperature)
             except (PlanError, GenerationError, LLMError) as e:
