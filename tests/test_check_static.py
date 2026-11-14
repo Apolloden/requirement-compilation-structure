@@ -271,6 +271,14 @@ class MenuCheckTests(unittest.TestCase):
         self.assertEqual(area_issues(files, plan),
                          [f'button "Note list" is outside region "Note list" in {MAIN}; render it inside that element (the requirement puts it there)'])
 
+    def test_a_control_rendered_by_a_child_component_in_the_area_is_not_judged(self):
+        # Final review, finding 2: an item component defined in the same file and used inside the area.
+        files = changed(MAIN, '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">',
+                        '<section aria-label="Note list" className="rounded border border-gray-200 bg-white"><NoteRow />')
+        files[MAIN] = "function NoteRow() { return <li><Link to=\"/x\">Create Note</Link></li>; }\n" + files[MAIN].replace(
+            '      <Link to="/notes/new" className="inline-block rounded bg-blue-700 px-3 py-1 text-white">Create Note</Link>\n', "")
+        self.assertEqual(self.inside(files), [])
+
     def test_an_area_rendered_by_a_component_is_skipped(self):
         files = changed(MAIN, '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">',
                         '<Panel aria-label="Note list" className="rounded border border-gray-200 bg-white">')

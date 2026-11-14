@@ -291,6 +291,15 @@ def text_control_issues(files: dict[str, str], plan: dict) -> list[str]:
     return issues
 
 
+COMPONENT_NAME = re.compile(r"^(?:export\s+(?:default\s+)?)?(?:function\s+([A-Z][\w$]*)|const\s+([A-Z][\w$]*)\s*=)", re.M)
+
+
+def _component_at(src: str, pos: int) -> str | None:
+    """The name of the top-level component whose definition starts last before pos."""
+    found = [m.group(1) or m.group(2) for m in COMPONENT_NAME.finditer(src, 0, pos)]
+    return found[-1] if found else None
+
+
 def area_issues(files: dict[str, str], plan: dict) -> list[str]:
     """Rule 6b: a control planned "in" a named area must be rendered inside that area's element (evidence.md 6.2).
     Judged only in a file that renders both the area (a plain tag with a literal aria-label) and the control's name."""
@@ -311,7 +320,10 @@ def area_issues(files: dict[str, str], plan: dict) -> list[str]:
                 spans = _element_spans(src, area)
                 places = [m.start() for m in occurrence.finditer(src)]
                 places = [p for p in places if not any(a <= p < o for a, o, _ in spans)]   # not the area's own label
-                if spans and places and not any(o <= p < b for p in places for _, o, b in spans):
+                # an occurrence inside a component that the area renders (<Row /> in the span) counts as inside
+                used = {m.group(1) for a, _, b in spans for m in re.finditer(r"<([A-Z][\w]*)", src[a:b])}
+                inside = any(o <= p < b for p in places for _, o, b in spans) or any(_component_at(src, p) in used for p in places)
+                if spans and places and not inside:
                     issues.append(f'{c.get("role")} "{name}" is outside {area_role} "{area}" in {key}; '
                                   'render it inside that element (the requirement puts it there)')
     return list(dict.fromkeys(issues))

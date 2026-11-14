@@ -211,7 +211,8 @@ TOP_GROUP = re.compile(r"^(REQ-\d+)")
 
 def _page_group(page: dict) -> str | None:
     """The top-level requirement group (REQ-8 for REQ-8.3.1) most of the page's reqs belong to; ties go to the first."""
-    groups = [m.group(1) for r in page.get("reqs", []) if isinstance(r, str) and (m := TOP_GROUP.match(r))]
+    reqs = page.get("reqs") if isinstance(page.get("reqs"), list) else []
+    groups = [m.group(1) for r in reqs if isinstance(r, str) and (m := TOP_GROUP.match(r))]
     return max(dict.fromkeys(groups), key=groups.count) if groups else None
 
 
@@ -306,7 +307,20 @@ def settle_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
     shape = _shape_problems(plan)
     if shape:
         return shape
-    pages, layout_controls = _dicts(plan["pages"]), _dicts(plan["layout"]["controls"])
+    # odd model output never crashes the settling (final review 1): lists where lists belong, strings where strings do
+    plan["pages"] = _dicts(plan["pages"])
+    plan["api"], plan["tables"] = _dicts(plan["api"]), _dicts(plan["tables"])
+    plan["layout"]["controls"] = _dicts(plan["layout"]["controls"])
+    for page in plan["pages"]:
+        page["reqs"] = [r for r in page.get("reqs") or [] if isinstance(r, str)] if isinstance(page.get("reqs"), list) else []
+        page["controls"] = _dicts(page.get("controls"))
+        page["shows"] = [x for x in page["shows"] if isinstance(x, str)] if isinstance(page.get("shows"), list) else (
+            [page["shows"]] if isinstance(page.get("shows"), str) else [])
+    for c in plan["layout"]["controls"] + [c for p in plan["pages"] for c in p["controls"]]:
+        for key in ("role", "name", "when"):
+            if key in c and not isinstance(c[key], str):
+                c[key] = str(c[key][0]) if isinstance(c[key], list) and c[key] else ("" if c[key] is None else str(c[key]))
+    pages, layout_controls = plan["pages"], plan["layout"]["controls"]
     notes: list[str] = []
 
     # ids, routes and modules that only need lowercase or a leading slash
@@ -413,7 +427,10 @@ def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[
         except ValueError as e:
             error = str(e)
         else:
-            notes = settle_plan(plan, spec, notes_text)
+            try:
+                notes = settle_plan(plan, spec, notes_text)
+            except Exception as e:   # a bug or odd output must cost this attempt at most, never the run (final review 1)
+                raise PlanError(f"settling the plan failed: {e!r}") from e
             if not _shape_problems(plan):
                 if notes:
                     plan["plan_notes"] = notes

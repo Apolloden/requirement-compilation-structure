@@ -326,6 +326,27 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(controls[1]["in"], "Note list"); self.assertNotIn("in", controls[2])
         self.assertEqual(notes, ['page notes: button "Refresh" was placed in "Sidebar", which is no area of that page or the layout'])
 
+    def test_odd_model_output_never_crashes_the_settling(self):
+        # Final review, finding 1: settle_plan raised TypeError on "reqs": null, AttributeError on "shows": "x",
+        # unhashable roles; nothing caught it, so the run shipped the template.
+        def change(p):
+            page(p, "home").update(reqs=None, shows="a welcome")
+            page(p, "home")["controls"] = [{"role": "heading", "name": "{x}", "when": "always"}, "junk"]
+            page(p, "notes")["reqs"] = [["REQ-1.1"], "REQ-1.1", "REQ-1.2", "REQ-1.3"]
+            page(p, "note")["controls"].append({"role": ["link"], "name": "Cancel", "when": "always"})
+            page(p, "note_new")["controls"] = None
+            p["api"].append("junk")
+        plan, notes = self.settled(change)
+        self.assertEqual(page(plan, "home")["reqs"], []); self.assertIn('heading "{x}"', page(plan, "home")["shows"])
+        self.assertEqual(page(plan, "notes")["reqs"], ["REQ-1.1", "REQ-1.2", "REQ-1.3"])
+        self.assertTrue(all(m.get("pages") for m in plan["modules"]))
+
+    def test_an_unexpected_error_while_settling_is_a_plan_error(self):
+        from unittest import mock as _mock
+        llm = FakeLLM({"plan": [json.dumps(golden_plan())]})
+        with _mock.patch("arcflash.plan.settle_plan", side_effect=KeyError("boom")):
+            with self.assertRaises(PlanError): make_plan(load_spec(NOTES), "", llm, temperature=0.2)
+
     def test_page_component(self):
         self.assertEqual((page_component("item_detail"), page_component("home")), ("PageItemDetail", "PageHome"))
 
