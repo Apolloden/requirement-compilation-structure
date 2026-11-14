@@ -70,6 +70,12 @@ def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict
     return {k: files[k] for k in files if k in keys}
 
 
+def _layout_areas(plan: dict) -> list[str]:
+    layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
+    return [str(c["name"]) for c in layout.get("controls", []) if isinstance(c, dict) and c.get("name")
+            and c.get("role") in ("navigation", "region", "banner", "complementary")]
+
+
 def quick_fix_task(files: dict[str, str], report: CheckReport) -> str | None:
     """For an app that does not build (or builds but does not start): the log tail and the lines around each place it
     names (file:line). None when the log names no generated file; the round is then a normal one (Task 5)."""
@@ -147,7 +153,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
             purpose, tokens = f"repair:{label}.{n}", config.MAX_TOKENS["repair"]
             tests = {k.removeprefix("tests/"): v for k, v in files.items() if k.startswith("tests/")}
             task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
-                        problems=best.to_prompt(test_files=tests))
+                        problems=best.to_prompt(test_files=tests, layout_areas=_layout_areas(plan)))
         try:
             answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
                                        stop_when=RepeatGuard(), continue_cut=False)

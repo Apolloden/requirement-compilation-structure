@@ -16,6 +16,10 @@ LOG_LINES = 60
 ERROR_LINES = 15
 ARIA_CHARS = 2500
 LOCATOR_LINE = re.compile(r"^\s*(?:- )?(?:waiting for |Locator: )")
+TEST_SCOPE_NOTE = ("TEST SCOPE: one match is in the shared layout and one in the page. If the requirement acts inside a named "
+                   "form or region, scope the test's lookup to it; if not, the grader looks in the whole page, so the page "
+                   "must not show the layout's control with the same name (hide it on this page).")
+MATCH_LINE = re.compile(r"^\s*\d+\) .* aka (.*)$")
 TEST_CODE_LINES = 20
 TITLES_PER_GROUP = 10
 
@@ -34,6 +38,22 @@ def _group_line(key: tuple[str, str]) -> str:
 
 def _plural(n: int) -> str:
     return f"{n} test" + ("" if n == 1 else "s")
+
+
+def _layout_versus_page(error: str, layout_areas) -> bool:
+    """A strict-mode failure whose matches lie one in the shared layout (banner, a navigation landmark, a named layout
+    area) and one outside it: the test may look in the wrong place (Task 6)."""
+    if "strict mode violation" not in error:
+        return False
+    marks = [f"getByLabel('{name}')" for name in layout_areas] + [f"name: '{name}'" for name in layout_areas]
+    places = set()
+    for line in error.splitlines():
+        m = MATCH_LINE.match(line)
+        if m:
+            aka = m.group(1)
+            places.add(aka.startswith(("getByRole('banner')", "getByRole('navigation'")) or any(aka.startswith(mark) or
+                       aka.startswith(f"getByRole('region', {{ {mark}") for mark in marks))
+    return places == {True, False}
 
 
 def _test_code(test: TestResult, test_files: dict[str, str]) -> str:
@@ -95,7 +115,7 @@ class CheckReport:
         """The failing tests of the FOCUS_GROUPS biggest groups: what a repair round aims at."""
         return [t for group in self.failure_groups()[:config.FOCUS_GROUPS] for t in group]
 
-    def _scenario_section(self, test_files: dict[str, str]) -> str:
+    def _scenario_section(self, test_files: dict[str, str], layout_areas=()) -> str:
         groups = self.failure_groups()
         head = f"SCENARIO TESTS: {self.scenario_passed} of {self.scenario_total} passed."
         if groups:
@@ -117,6 +137,8 @@ class CheckReport:
             code = _test_code(t, test_files)
             if code:
                 lines.append(code)
+            if _layout_versus_page(t.error, layout_areas):
+                lines.append(TEST_SCOPE_NOTE)
             if len(tests) > 1:
                 others = [o.title for o in tests[1:]]
                 more = f" (and {len(others) - TITLES_PER_GROUP} more)" if len(others) > TITLES_PER_GROUP else ""
@@ -126,9 +148,10 @@ class CheckReport:
             lines += [f"- ({_plural(len(g))}) {_group_line(_group_key(g[0].error))}" for g in groups[config.FOCUS_GROUPS:]]
         return "\n".join(lines)
 
-    def to_prompt(self, max_chars: int = config.REPORT_CHARS, test_files: dict[str, str] | None = None) -> str:
+    def to_prompt(self, max_chars: int = config.REPORT_CHARS, test_files: dict[str, str] | None = None,
+                  layout_areas=()) -> str:
         """The problem text of Appendix B.4, most important first, cut at max_chars. `test_files` (file name → source)
-        adds the lines around each shown group's failing test line."""
+        adds the lines around each shown group's failing test line; `layout_areas` are the layout's named areas."""
         sections = []
         if not self.built:
             sections.append("BUILD FAILED (npm run build). Last lines:\n" + proc.tail(self.build_log, LOG_LINES))
@@ -141,7 +164,7 @@ class CheckReport:
             sections.append("PAGE CHECK (each planned page opened directly):\n" + "\n".join(
                 f"- {t.title}: " + "\n  ".join(t.error.splitlines()[:3]) for t in failed_smoke))
         if self.browser_checked and (self.scenarios or self.load_errors):
-            sections.append(self._scenario_section(test_files or {}))
+            sections.append(self._scenario_section(test_files or {}, layout_areas))
         if self.server_log.strip():
             sections.append(f"SERVER LOG (last {SERVER_LOG_LINES} lines):\n" + proc.tail(self.server_log, SERVER_LOG_LINES))
         text = "\n\n".join(sections)

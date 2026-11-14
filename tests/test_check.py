@@ -106,6 +106,29 @@ class CheckReportTests(unittest.TestCase):
         self.assertEqual(text.count("FAILED: "), 3)
         self.assertEqual([t.title for t in grouped_report([1, 4, 2, 3, 1]).focus_tests()][:2], ["SCN-1-0 t", "SCN-1-1 t"])
 
+    def test_strict_mode_between_layout_and_page_is_marked_as_a_test_scope_problem(self):
+        # Shape of the recorded v4 errors (evidence.md 3.2 and 6.4), names invented.
+        error = ("Error: locator.click: Error: strict mode violation: getByRole('button', { name: 'Enter' }) resolved to 2 elements:\n"
+                 "    1) <button type=\"button\">Enter</button> aka getByRole('banner').getByRole('button', { name: 'Enter' })\n"
+                 "    2) <button type=\"submit\">Enter</button> aka getByRole('region', { name: 'Enter' }).getByRole('button', { name: 'Enter' })\n")
+        nav = error.replace("getByRole('banner')", "getByRole('navigation', { name: 'Site menu' })")
+        label = error.replace("getByRole('banner')", "getByLabel('Site menu')")
+        for text in (error, nav, label):
+            r = CheckReport(static_issues=[], built=True, booted=True, browser_checked=True,
+                            scenarios=[TestResult("SCN-1 t", "scenarios-1.spec.ts", "failed", error=text)])
+            self.assertIn("\nTEST SCOPE: one match is in the shared layout and one in the page. If the requirement acts inside a "
+                          "named form or region, scope the test's lookup to it; if not, the grader looks in the whole page, so "
+                          "the page must not show the layout's control with the same name (hide it on this page).",
+                          r.to_prompt(layout_areas=["Site menu"]))
+
+    def test_strict_mode_inside_the_page_is_not_marked(self):
+        error = ("Error: strict mode violation: getByRole('button', { name: 'Remove' }) resolved to 2 elements:\n"
+                 "    1) <button>Remove</button> aka getByRole('row', { name: 'First' }).getByRole('button')\n"
+                 "    2) <button>Remove</button> aka getByRole('row', { name: 'Second' }).getByRole('button')\n")
+        r = CheckReport(static_issues=[], built=True, booted=True, browser_checked=True,
+                        scenarios=[TestResult("SCN-1 t", "scenarios-1.spec.ts", "failed", error=error)])
+        self.assertNotIn("TEST SCOPE", r.to_prompt(layout_areas=["Site menu"]))
+
     def test_prompt_build_and_start_sections(self):
         r = CheckReport(static_issues=["x"], built=False, build_log="vite error\n" * 100)
         text = r.to_prompt()

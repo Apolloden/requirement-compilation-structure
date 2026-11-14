@@ -50,6 +50,13 @@ class PromptTests(unittest.TestCase):
             if name not in AMENDED | ADDED:
                 self.assertEqual(load_prompt(name), found[name], name)
 
+    def test_tests_scope_exactly_where_the_requirement_scopes(self):
+        # docs/6-arclaser/evidence.md 6.4: the grader scoped "Click Log in inside that form" (Stack Overflow) but not
+        # "click the Sign in submit button" (PrestaShop), which failed on two buttons of the same name.
+        tests = load_prompt("tests")
+        self.assertIn("Scope a lookup to a named form, region or dialog exactly when the step acts inside it", tests)
+        self.assertIn("otherwise look it up in the whole page, as the grader does", tests)
+
     def test_helpers_export_every_role_helper(self):
         # evidence.md C1: with only region() available, our tests looked up a navigation landmark as a region, like the code.
         helpers = (AGENT_ROOT / "arcflash" / "template" / "harness" / "tests" / "helpers.ts").read_text(encoding="utf-8")
