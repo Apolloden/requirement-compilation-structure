@@ -87,11 +87,12 @@ class FakeLLM:
         self.usage = Usage()
         self._lock = threading.Lock()
 
-    def _answer(self, method, purpose, system, user, max_tokens, json_mode=False, temperature=None, background=False):
+    def _answer(self, method, purpose, system, user, max_tokens, json_mode=False, temperature=None, background=False,
+                stop_when=None, continue_cut=True):
         with self._lock:
             self.calls.append({"method": method, "purpose": purpose, "system": system, "user": user,
                                "max_tokens": max_tokens, "json_mode": json_mode, "temperature": temperature,
-                               "background": background})
+                               "background": background, "stop_when": stop_when, "continue_cut": continue_cut})
             keys = [k for k in self.script if purpose.startswith(k)]
             if not keys:
                 raise AssertionError(f"FakeLLM has no answers for purpose {purpose!r}")
@@ -108,8 +109,10 @@ class FakeLLM:
     def complete(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2):
         return self._answer("complete", purpose, system, user, max_tokens, json_mode, temperature)
 
-    def complete_long(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2, background=False, done=None):
-        return self._answer("complete_long", purpose, system, user, max_tokens, json_mode, temperature, background)
+    def complete_long(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2, background=False, done=None,
+                      stop_when=None, continue_cut=True):
+        return self._answer("complete_long", purpose, system, user, max_tokens, json_mode, temperature, background,
+                            stop_when, continue_cut)
 
     def describe_image(self, purpose, prompt, image, mime, *, max_tokens):
         return self._answer("describe_image", purpose, None, prompt, max_tokens)

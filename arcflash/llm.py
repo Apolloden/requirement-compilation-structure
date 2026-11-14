@@ -16,12 +16,13 @@ from arcflash import config
 
 OPTIONAL_FIELDS = ("thinking", "stream_options", "response_format", "max_tokens")
 _RUNAWAY_TAIL_CHARS = 20_000  # how much of a streaming answer the runaway check looks at
+_PAIR_END = ">>>>>>> REPLACE"
 
 
 @dataclass
 class Completion:
     text: str
-    finish_reason: str            # "stop", "length", "runaway", or what the API sent
+    finish_reason: str            # "stop", "length", "runaway", "cut", "guard" (stop_when said stop), or what the API sent
     input_tokens: int = 0
     cached_tokens: int = 0
     output_tokens: int = 0
@@ -141,26 +142,30 @@ class LLM:
 
     def complete_long(self, purpose: str, system: str | None, user: str, *, max_tokens: int,
                       json_mode: bool = False, temperature: float = config.TEMPERATURE, background: bool = False,
-                      done=None) -> Completion:
+                      done=None, stop_when=None, continue_cut: bool = True) -> Completion:
         """`background` calls (the test writer) wait for their own slots, never for those of the critical path.
         `done(text)` says whether a cut answer is already whole (the cut lost only the end of the stream); it is then
-        not continued, because a continuation of a whole answer adds text that breaks it."""
+        not continued, because a continuation of a whole answer adds text that breaks it.
+        `stop_when(text)` is asked each time a new SEARCH/REPLACE pair ends; True closes the stream (finish "guard"),
+        and a guarded answer is never continued. With `continue_cut=False` an answer at the token limit is not continued."""
         messages = _messages(system, user)
-        result = self._request(purpose, messages, max_tokens, json_mode, temperature, background=background)
+        result = self._request(purpose, messages, max_tokens, json_mode, temperature, background=background, stop_when=stop_when)
         if result.finish_reason == "runaway":
             messages = _messages(system, user + "\n\n" + config.RUNAWAY_PROMPT)
             result = self._add(result, self._request(f"{purpose}+retry", messages, max_tokens, json_mode, temperature,
-                                                     background=background), replace=True)
+                                                     background=background, stop_when=stop_when), replace=True)
         n = 0
+        continued = ("length", "cut") if continue_cut else ("cut",)
         # "cut": the connection closed mid-answer (no finish reason, no usage); the text so far is kept and continued.
-        while result.finish_reason in ("length", "cut") and n < config.MAX_CONTINUATIONS:
+        while result.finish_reason in continued and n < config.MAX_CONTINUATIONS:
             if result.finish_reason == "cut" and done is not None and done(result.text):
                 result.finish_reason = "stop"
                 break
             n += 1
             more = messages + [{"role": "assistant", "content": result.text}, {"role": "user", "content": config.CONTINUE_PROMPT}]
             # A continuation is a fragment, never a JSON object of its own, so JSON mode stays off for it.
-            part = self._request(f"{purpose}+{n}", more, max_tokens, False, temperature, background=background)
+            part = self._request(f"{purpose}+{n}", more, max_tokens, False, temperature, background=background,
+                                 stop_when=stop_when)
             part.text = strip_overlap(result.text, part.text)
             result = self._add(result, part)
         return result
@@ -205,7 +210,8 @@ class LLM:
                     return name
         return None
 
-    def _request(self, purpose, messages, max_tokens, json_mode, temperature, image_note="", background=False) -> Completion:
+    def _request(self, purpose, messages, max_tokens, json_mode, temperature, image_note="", background=False,
+                 stop_when=None) -> Completion:
         waits = list(config.RETRY_WAITS)
         slots = self._background_slots if background else self._slots
         while True:
@@ -214,7 +220,7 @@ class LLM:
             kwargs = self._kwargs(messages, max_tokens, json_mode, temperature)
             try:
                 with slots:
-                    completion = self._stream(kwargs)
+                    completion = self._stream(kwargs, stop_when)
                 break
             except openai.APIStatusError as e:
                 if e.status_code == 400 and self._rejected_field(e):
@@ -226,16 +232,16 @@ class LLM:
                 error = e
             if not waits:
                 raise LLMError(f"{purpose}: gave up after {len(config.RETRY_WAITS)} waits: {error}") from error
-            print(f"[arcflash] {purpose}: retry in {waits[0]} s after {type(error).__name__}: {str(error)[:120]}", flush=True)
+            print(f"[arclaser] {purpose}: retry in {waits[0]} s after {type(error).__name__}: {str(error)[:120]}", flush=True)
             self.sleep(waits.pop(0))
         self.usage.add(purpose, completion)
         self._log(purpose, messages, completion, image_note)
         return completion
 
-    def _stream(self, kwargs) -> Completion:
+    def _stream(self, kwargs, stop_when=None) -> Completion:
         started = time.monotonic()
         stream = self.client.chat.completions.create(**kwargs)
-        text, finish, usage = "", None, None
+        text, finish, usage, scanned = "", None, None, 0
         chunks = iter(stream)
         try:
             while True:
@@ -260,6 +266,13 @@ class LLM:
                 if text and is_runaway(text[-_RUNAWAY_TAIL_CHARS:]):
                     finish = "runaway"
                     break
+                if stop_when is not None and text.find(_PAIR_END, max(0, scanned - len(_PAIR_END))) >= 0:
+                    scanned = len(text)   # asked once per new pair end, not per chunk
+                    if stop_when(text):
+                        finish = "guard"
+                        break
+                elif stop_when is not None:
+                    scanned = len(text)
         finally:
             close = getattr(stream, "close", None)
             if callable(close):

@@ -7,7 +7,7 @@ from typing import Callable
 from urllib.parse import urlparse
 
 from arcflash import config
-from arcflash.blocks import apply_edits, parse_edits, render_files
+from arcflash.blocks import RepeatGuard, apply_edits, parse_edits, render_files
 from arcflash.check import CheckReport
 from arcflash.llm import LLMError
 from arcflash.prompting import fill, load_prompt
@@ -69,7 +69,8 @@ def _apply(llm, purpose: str, system: str, context: str, files: dict[str, str], 
     targets = list(dict.fromkeys(p.split(": ", 1)[0] for p in problems))
     task = fill(load_prompt("edit_fix"), problems="\n".join(f"- {p}" for p in problems),
                 files=render_files({k: new[k] for k in targets if k in new}))
-    fix = llm.complete_long(f"{purpose}.fix", system, context + "\n\n" + task, max_tokens=config.MAX_TOKENS["repair"])
+    fix = llm.complete_long(f"{purpose}.fix", system, context + "\n\n" + task, max_tokens=config.MAX_TOKENS["repair"],
+                            stop_when=RepeatGuard(), continue_cut=False)
     new, _ = apply_edits(new, parse_edits(fix.text))
     return new
 
@@ -91,7 +92,8 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
                     problems=best.to_prompt())
         try:
-            answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=config.MAX_TOKENS["repair"])
+            answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=config.MAX_TOKENS["repair"],
+                                       stop_when=RepeatGuard(), continue_cut=False)
             new = _apply(llm, purpose, system, context, files, answer.text)
         except LLMError:
             break

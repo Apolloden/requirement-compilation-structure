@@ -4,10 +4,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from arcflash import config
+
 ALLOWED_PATH = re.compile(r"backend/app\.js|frontend/src/shared\.jsx|frontend/src/App\.jsx"
                           r"|frontend/src/pages/[a-z][a-z0-9_]*\.jsx|tests/scenarios-[0-9]+\.spec\.ts")
 HEADER = re.compile(r"^=== (FILE|EDIT): (.+?) ===\s*$")
 END = {"FILE": re.compile(r"^=== END FILE ===\s*$"), "EDIT": re.compile(r"^=== END EDIT ===\s*$")}
+PAIR = re.compile(r"^<{7} SEARCH[ \t]*\n(.*?)\n={7}[ \t]*\n(.*?)\n>{7} REPLACE[ \t]*$", re.S | re.M)
 SEARCH, DIVIDER, REPLACE = re.compile(r"^<{7} SEARCH\s*$"), re.compile(r"^={7}\s*$"), re.compile(r"^>{7} REPLACE\s*$")
 
 
@@ -67,9 +70,25 @@ def parse_file_blocks(text: str) -> dict[str, str]:
     return {path: _content(_unfence(lines)) for kind, path, lines in _blocks(text) if kind == "FILE"}
 
 
+class RepeatGuard:
+    """Says when a streaming repair answer has started repeating itself: REPEAT_GUARD_PAIRS pairs in a row that change
+    nothing (SEARCH equals REPLACE) or repeat an earlier pair. A real pair resets the run (evidence.md 2.5, A.2)."""
+
+    def __call__(self, text: str) -> bool:
+        seen, run = set(), 0
+        for m in PAIR.finditer(text):
+            pair = (m.group(1).strip(), m.group(2).strip())
+            run = run + 1 if pair[0] == pair[1] or pair in seen else 0
+            seen.add(pair)
+            if run >= config.REPEAT_GUARD_PAIRS:
+                return True
+        return False
+
+
 def parse_edits(text: str) -> list[Edit]:
-    """EDIT blocks (one Edit per SEARCH/REPLACE pair) and FILE blocks (whole-file Edits), in answer order."""
-    edits = []
+    """EDIT blocks (one Edit per SEARCH/REPLACE pair) and FILE blocks (whole-file Edits), in answer order. A pair that
+    changes nothing or repeats an earlier pair of the answer is skipped: applied twice, it would fail and cost a call."""
+    edits, seen = [], set()
     for kind, path, lines in _blocks(text):
         lines = _unfence(lines)
         if kind == "FILE":
@@ -82,7 +101,10 @@ def parse_edits(text: str) -> list[Edit]:
             elif state == "search" and DIVIDER.match(line):
                 state = "replace"
             elif state == "replace" and REPLACE.match(line):
-                edits.append(Edit(path, _join(search), _join(replace)))
+                key = (path, _join(search), _join(replace))
+                if key[1].strip() != key[2].strip() and key not in seen:
+                    edits.append(Edit(*key))
+                seen.add(key)
                 state = None
             elif state == "search":
                 search.append(line)

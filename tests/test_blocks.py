@@ -1,6 +1,7 @@
 import unittest
 
-from arcflash.blocks import Edit, apply_edits, is_allowed_path, parse_edits, parse_file_blocks, render_files
+from arcflash import config
+from arcflash.blocks import Edit, RepeatGuard, apply_edits, is_allowed_path, parse_edits, parse_file_blocks, render_files
 
 APP = "frontend/src/App.jsx"
 
@@ -41,6 +42,24 @@ class BlockTests(unittest.TestCase):
         text = "=== FILE: backend/app.js ===\nhalf\n" + edit_block(APP, ("a\n", "A\n"))
         self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n")])
         self.assertEqual(parse_file_blocks("=== FILE: backend/app.js ===\nhalf"), {})
+
+    def test_repeat_guard_stops_after_eight_bad_pairs_in_a_row(self):
+        # Replay of the v4 rounds: stopping after 8 bad pairs in a row keeps 83% of the real changes with 34% of the
+        # text (docs/6-arclaser/evidence.md 2.5, appendix A.2).
+        self.assertEqual(config.REPEAT_GUARD_PAIRS, 8)
+        guard = RepeatGuard()
+        real = lambda i: f"<<<<<<< SEARCH\nold {i}\n=======\nnew {i}\n>>>>>>> REPLACE\n"
+        noop = lambda i: f"<<<<<<< SEARCH\nsame {i}\n=======\nsame {i}\n>>>>>>> REPLACE\n"
+        text = f"=== EDIT: {APP} ===\n" + real(0) + "".join(noop(i) for i in range(7))
+        self.assertFalse(guard(text))
+        self.assertTrue(guard(text + noop(7)))
+        self.assertFalse(guard(text + real(1) + noop(8)))   # a real pair resets the run
+        self.assertTrue(guard(text + real(0)))               # a repeat of an earlier pair is bad too
+
+    def test_duplicate_and_no_op_pairs_are_skipped(self):
+        # A duplicate of an applied edit fails ("SEARCH text not found") and costs an edit_fix call for nothing.
+        text = edit_block(APP, ("a\n", "A\n"), ("b\n", "b\n"), ("a\n", "A\n"), (" c\n", "c \n"), ("d\n", "D\n"))
+        self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n"), Edit(APP, "d\n", "D\n")])
 
     def test_only_generated_paths_are_allowed(self):
         for p in ["backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/main.jsx", "tests/scenarios-2.spec.ts"]:

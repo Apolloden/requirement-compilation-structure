@@ -97,6 +97,17 @@ class RepairTests(unittest.TestCase):
         self.assertTrue(llm.calls[1]["user"].startswith("CTX\n\nThese edits could not be applied:"))
         self.assertIn("Fixed notebook.", (self.ws.out / MAIN).read_text())
 
+    def test_a_repair_answer_that_hits_the_limit_is_applied_not_continued(self):
+        # v4: a repair answer was continued twice to 36k tokens, 85 to 92% of it no-op pairs (evidence.md 2.5).
+        from arcflash.blocks import RepeatGuard
+        from arcflash.llm import Completion
+        fixed = edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Fixed notebook.</p>")
+        llm = FakeLLM({"repair:": [Completion(text=fixed, finish_reason="length")]})
+        best, snap = self.run_loop(llm, [self.green])
+        self.assertEqual((snap.name, len(llm.calls)), ("a1-r1", 1))
+        self.assertEqual(config.MAX_TOKENS["repair"], 8000)
+        self.assertEqual((llm.calls[0]["continue_cut"], type(llm.calls[0]["stop_when"])), (False, RepeatGuard))
+
     def test_budget_stops_repairs(self):
         llm = FakeLLM({})
         self.run_loop(llm, [], budget=False); self.assertEqual(llm.calls, [])

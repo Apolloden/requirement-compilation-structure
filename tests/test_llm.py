@@ -180,6 +180,30 @@ class LLMTests(unittest.TestCase):
         for t in both: t.join()
         self.assertEqual(client.max_in_flight, 4)   # two background calls never hold a foreground slot
 
+    def test_stop_when_ends_the_stream_and_keeps_the_text(self):
+        # v4 repair rounds that hit the limit three times were 85 to 92% no-op pairs (docs/6-arclaser/evidence.md 2.5).
+        pair = "<<<<<<< SEARCH\na\n=======\nb\n>>>>>>> REPLACE\n"
+        seen = []
+        def stop_when(text):
+            seen.append(text)
+            return text.count(">>>>>>> REPLACE") >= 3
+        llm = self.make([stream_chunks(pair * 5, finish="length", pieces=5), stream_chunks("never sent")])
+        c = llm.complete_long("repair:a1.1", "S", "U", max_tokens=10, stop_when=stop_when)
+        self.assertEqual((c.text, c.finish_reason), (pair * 3, "guard"))
+        self.assertEqual(len(self.client.requests), 1)
+        self.assertEqual(len(seen), 3)   # asked only when a new REPLACE line arrived
+        self.assertEqual(llm.usage.records()[0]["finish"], "guard")
+
+    def test_an_answer_at_the_limit_is_not_continued_when_asked(self):
+        llm = self.make([stream_chunks("part", finish="length"), stream_chunks("never sent")])
+        c = llm.complete_long("repair:a1.1", "S", "U", max_tokens=10, continue_cut=False)
+        self.assertEqual((c.text, c.finish_reason, len(self.client.requests)), ("part", "length", 1))
+
+    def test_log_lines_carry_the_arclaser_label(self):
+        with mock.patch("builtins.print") as printed:
+            self.make([api_error(503, "busy"), stream_chunks("ok")]).complete("x", None, "u", max_tokens=10)
+        self.assertTrue(printed.call_args[0][0].startswith("[arclaser] x: retry in 15 s"))
+
     def test_continuation_stops_after_two(self):
         c = self.make([stream_chunks(f"part{i} ", finish="length") for i in range(3)]).complete_long("x", None, "u", max_tokens=10)
         self.assertEqual((c.finish_reason, len(self.client.requests)), ("length", 3))
