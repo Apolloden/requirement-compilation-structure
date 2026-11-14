@@ -232,6 +232,65 @@ def _element_spans(src: str, name: str) -> list[tuple[int, int, int]]:
     return spans
 
 
+ANY_TAG = re.compile(r"<(/?)([A-Za-z][\w.]*)")
+INLINE_TAGS = frozenset({"span", "strong", "em", "b", "i", "small", "u", "mark", "abbr"})
+CONTROL_ELEMENTS = {"link": frozenset({"a", "Link", "NavLink"}), "button": frozenset({"button"})}
+ENCLOSING_WINDOW = 4000   # how far back the enclosing tags are read
+
+
+def _enclosing(src: str, pos: int) -> list[tuple[str, int, int]]:
+    """Unclosed opening tags before pos, nearest last: (tag, start, end of the opening tag)."""
+    stack: list[tuple[str, int, int]] = []
+    for m in ANY_TAG.finditer(src, max(0, pos - ENCLOSING_WINDOW), pos + 1):
+        if m.group(1):
+            for k in range(len(stack) - 1, -1, -1):
+                if stack[k][0] == m.group(2):
+                    del stack[k:]
+                    break
+            continue
+        end = _tag_end(src, m.end())
+        if src[end - 2] != "/":
+            stack.append((m.group(2), m.start(), end))
+    return stack
+
+
+def _rendered_as(src: str, pos: int, role: str) -> str | None:
+    """None when the text at pos sits in an element of the role (or in a component, which may render one); else the
+    tag it sits in. Inline wrappers such as <span> are looked through."""
+    for tag, start, end in reversed(_enclosing(src, pos)):
+        explicit = EXPLICIT_ROLE.search(src, start, end)
+        if tag in CONTROL_ELEMENTS[role] or tag[0].isupper() or (explicit and explicit.group(3) == role):
+            return None
+        if tag not in INLINE_TAGS:
+            return tag
+    return None
+
+
+def text_control_issues(files: dict[str, str], plan: dict) -> list[str]:
+    """Rule 2: a planned link or button whose name appears in the frontend only as plain text (evidence.md 6.3)."""
+    issues = []
+    frontend = {k: v for k, v in files.items() if k.startswith("frontend/")}
+    layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
+    controls = [c for c in layout.get("controls", []) if isinstance(c, dict)]
+    controls += [c for p in plan.get("pages", []) if isinstance(p, dict) for c in p.get("controls", []) if isinstance(c, dict)]
+    seen = set()
+    for c in controls:
+        role, name = c.get("role"), str(c.get("name", "")).strip()
+        if role not in CONTROL_ELEMENTS or not name or "{" in name or (role, name) in seen:
+            continue
+        seen.add((role, name))
+        text = re.compile(rf">\s*{re.escape(name)}\s*<")
+        found = [(key, m.start(), _rendered_as(src, m.start(), role)) for key, src in frontend.items() for m in text.finditer(src)]
+        literal = re.compile(rf"([\"'`]){re.escape(name)}\1")
+        elsewhere = any(literal.search(src) or any(r in (role, None) for _, r in _rendered_roles(src, name))
+                        for src in frontend.values())   # data ({label: "X"}) or aria-label="X": not judged
+        if found and not elsewhere and all(tag is not None for _, _, tag in found):
+            key, _, tag = found[0]
+            fix = "<Link to>" if role == "link" else "<button>"
+            issues.append(f'{role} "{name}" is rendered as text in <{tag}> in {key}; use {fix} (rule 2)')
+    return issues
+
+
 def area_issues(files: dict[str, str], plan: dict) -> list[str]:
     """Rule 6b: a control planned "in" a named area must be rendered inside that area's element (evidence.md 6.2).
     Judged only in a file that renders both the area (a plain tag with a literal aria-label) and the control's name."""
@@ -417,6 +476,9 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
 
     # 8b2: controls planned inside a named area are rendered inside it (Task 6b)
     issues += area_issues(files, plan)
+
+    # 8b3: a planned link or button rendered only as plain text (Task 11)
+    issues += text_control_issues(files, plan)
 
     # 8c: hover menus that a click closes (rule 16)
     issues += menu_issues(frontend)

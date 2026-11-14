@@ -1,6 +1,6 @@
 import unittest
 
-from arcflash.check_static import area_issues, backend_routes, frontend_api_calls, normalize_api_path, role_issues, static_issues
+from arcflash.check_static import area_issues, backend_routes, text_control_issues, frontend_api_calls, normalize_api_path, role_issues, static_issues
 from tests.golden import golden_files, golden_plan
 
 APP = "backend/app.js"
@@ -202,6 +202,44 @@ class RoleCheckTests(unittest.TestCase):
 class MenuCheckTests(unittest.TestCase):
     # evidence.md C2: the menu opened on mouse enter and toggled on click; Playwright's click() moves the mouse first
     # (opens it), then clicks (closes it), so no menu entry was ever found.
+    # Task 11 (evidence.md 6.3): 12306's planned links "Personal" and "Information management" were <div> headings,
+    # so every flow through them stopped (no passenger, no order on the grader).
+    def as_text(self, wrapper):
+        files = changed(MAIN, '<Link to="/notes/new" className="inline-block rounded bg-blue-700 px-3 py-1 text-white">Create Note</Link>',
+                        wrapper)
+        return text_control_issues(files, golden_plan())
+
+    def test_a_planned_link_rendered_as_a_div_is_reported(self):
+        self.assertEqual(self.as_text('<div className="px-4 py-2 text-gray-700">Create Note</div>'),
+                         [f'link "Create Note" is rendered as text in <div> in {MAIN}; use <Link to> (rule 2)'])
+        plan = golden_plan()
+        files = changed(MAIN, '<Link to="/notes/new" className="inline-block rounded bg-blue-700 px-3 py-1 text-white">Create Note</Link>',
+                        '<div>Create Note</div>')
+        self.assertIn(f'link "Create Note" is rendered as text in <div> in {MAIN}; use <Link to> (rule 2)', static_issues(files, plan))
+
+    def test_a_planned_link_in_a_link_component_is_fine(self):
+        self.assertEqual(text_control_issues(golden_files(), golden_plan()), [])
+        self.assertEqual(self.as_text('<Link to="/notes/new"><span className="x">Create Note</span></Link>'), [])
+        self.assertEqual(self.as_text('<div role="link" tabIndex={0}>Create Note</div>'), [])
+        self.assertEqual(self.as_text('<NavItem to="/notes/new">Create Note</NavItem>'), [])   # a component may render a link
+
+    def test_a_name_rendered_from_data_or_as_a_label_is_not_judged(self):
+        # Replay on the v4 builds: menus built from arrays ({label: "X"}) and icon buttons (aria-label="X") hold the name
+        # outside a text node; only a name that appears nowhere else is judged.
+        data = '<div>Create Note</div>{[{ label: "Create Note", to: "/notes/new" }].map((i) => <Link key={i.to} to={i.to}>{i.label}</Link>)}'
+        self.assertEqual(self.as_text(data), [])
+        self.assertEqual(self.as_text('<h2>Create Note</h2><a href="/notes/new" aria-label="Create Note">+</a>'), [])
+
+    def test_a_name_inside_a_button_and_a_heading_is_fine(self):
+        files = changed(MAIN, "<h1 className=\"text-2xl font-bold\">Notes</h1>\n      <Link",
+                        "<h1 className=\"text-2xl font-bold\">Create Note</h1>\n      <Link")
+        self.assertEqual(text_control_issues(files, golden_plan()), [])
+        button = changed("frontend/src/pages/m1.jsx", "Save Note</button>", "Save Note</button>\n<h2>Save Note</h2>")
+        self.assertEqual(text_control_issues(button, golden_plan()), [])
+        only = changed("frontend/src/pages/m1.jsx", "Save Note</button>", "Saving</button>\n<p>Save Note</p>")
+        self.assertEqual([i for i in text_control_issues(only, golden_plan()) if "Save Note" in i],
+                         ['button "Save Note" is rendered as text in <p> in frontend/src/pages/m1.jsx; use <button> (rule 2)'])
+
     # Task 6b (docs/6-arclaser/evidence.md 6.2): a control the requirement places inside a named area.
     def inside(self, files):
         plan = golden_plan()
