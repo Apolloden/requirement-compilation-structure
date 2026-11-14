@@ -8,7 +8,7 @@ from pathlib import Path
 from arcflash.spec import Spec
 
 PROMPTS = Path(__file__).resolve().parent / "prompts"
-PROMPT_NAMES = ("rules", "plan", "plan_fix", "backend", "frontend_first", "frontend_more", "missing_files", "tests",
+PROMPT_NAMES = ("rules", "plan", "plan_fix", "backend", "frontend_first", "frontend_more", "missing_files", "kept_files", "tests",
                 "repair", "edit_fix", "vision")
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 UNAVAILABLE = "(screenshot unavailable)"

@@ -108,7 +108,7 @@ class FakeLLM:
     def complete(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2):
         return self._answer("complete", purpose, system, user, max_tokens, json_mode, temperature)
 
-    def complete_long(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2, background=False):
+    def complete_long(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2, background=False, done=None):
         return self._answer("complete_long", purpose, system, user, max_tokens, json_mode, temperature, background)
 
     def describe_image(self, purpose, prompt, image, mime, *, max_tokens):

@@ -196,7 +196,8 @@ def _parse(text: str) -> dict:
 
 def settle_modules(plan: dict) -> None:
     """Make each page's "module" agree with the module lists, in place: the list wins (code generation reads the
-    lists); a page that no list has joins the module it names. Saves a full plan-fix call (v4 plan R6)."""
+    lists); a page that no list has joins the module it names if that module has room. Saves a full plan-fix call
+    (v4 plan R6), and the checks that read page["module"] see what code generation reads."""
     if not isinstance(plan.get("pages"), list) or not isinstance(plan.get("modules"), list):
         return
     modules = {m["id"]: m for m in _dicts(plan["modules"]) if isinstance(m.get("id"), str) and isinstance(m.get("pages"), list)}
@@ -205,8 +206,17 @@ def settle_modules(plan: dict) -> None:
         owners = [mid for mid, m in modules.items() if pid in m["pages"]]
         if len(owners) == 1:
             page["module"] = owners[0]
-        elif not owners and page.get("module") in modules:
+        elif (not owners and page.get("module") in modules
+              and len(modules[page["module"]]["pages"]) < config.MAX_PAGES_PER_MODULE):   # never overfill: that is a problem too
             modules[page["module"]]["pages"].append(pid)
+
+
+def _parses(text: str) -> bool:
+    try:
+        _parse(text)
+    except ValueError:
+        return False
+    return True
 
 
 def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[dict, list[str]]:
@@ -225,7 +235,7 @@ def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[
             user = base + "\n\n" + fill(load_prompt("plan_fix"), problems="\n".join(f"- {p}" for p in problems),
                                         previous=previous)
         answer = llm.complete_long(purpose, system, user, max_tokens=config.MAX_TOKENS["plan"], json_mode=True,
-                                   temperature=temperature)
+                                   temperature=temperature, done=_parses)
         previous = answer.text
         try:
             plan = _parse(answer.text)

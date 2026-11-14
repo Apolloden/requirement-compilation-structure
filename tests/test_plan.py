@@ -8,10 +8,10 @@ from pathlib import Path
 
 from arcflash import config
 from arcflash.llm import LLM
-from arcflash.plan import PlanError, make_plan, page_component, validate_plan
+from arcflash.plan import PlanError, make_plan, page_component, settle_modules, validate_plan
 from arcflash.prompting import build_context, load_prompt
 from arcflash.spec import load_spec
-from tests.fakes import FakeClient, FakeLLM, stream_chunks
+from tests.fakes import FakeClient, FakeLLM, cut_chunks, stream_chunks
 from tests.golden import golden_plan
 from tests.support import FIXTURES
 
@@ -166,6 +166,13 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(page(plan, "note")["module"], module)
                 self.assertIn("note", next(m for m in plan["modules"] if m["id"] == module)["pages"])
 
+    def test_an_orphan_does_not_overfill_its_module(self):
+        plan = mutated(nine_pages)                              # "main" lists 9 pages: one too many already
+        plan["modules"][0]["pages"].remove("note")              # now 8, and "note" is in no list
+        settle_modules(plan)
+        self.assertNotIn("note", plan["modules"][0]["pages"])   # joining would make 9 > MAX_PAGES_PER_MODULE
+        self.assertIn("modules: page note is in no module", validate_plan(plan, self.spec))
+
     def test_problems_are_sent_back(self):
         plan_without_req_1_3 = mutated(without_req_1_3)
         llm = FakeLLM({"plan-fix": [json.dumps(golden_plan())], "plan": [json.dumps(plan_without_req_1_3)]})
@@ -203,6 +210,16 @@ class PlanTests(unittest.TestCase):
         llm = LLM(client=FakeClient([stream_chunks(text[:cut], finish="length"), stream_chunks(text[cut:])]), sleep=lambda s: None)
         plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
         self.assertEqual((plan, problems), (golden_plan(), []))
+
+    def test_a_cut_plan_that_parses_is_not_continued(self):
+        llm = LLM(client=FakeClient([cut_chunks(json.dumps(golden_plan())), stream_chunks("}")]), sleep=lambda s: None)
+        plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
+        self.assertEqual((plan, problems, len(llm.client.requests)), (golden_plan(), [], 1))
+
+    def test_a_cut_plan_that_does_not_parse_is_continued(self):
+        text = json.dumps(golden_plan()); cut = len(text) // 2
+        llm = LLM(client=FakeClient([cut_chunks(text[:cut]), stream_chunks(text[cut:])]), sleep=lambda s: None)
+        self.assertEqual(make_plan(load_spec(NOTES), "", llm, temperature=0.2), (golden_plan(), []))
 
     def test_page_component(self):
         self.assertEqual((page_component("item_detail"), page_component("home")), ("PageItemDetail", "PageHome"))

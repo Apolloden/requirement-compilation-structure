@@ -182,6 +182,10 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue([c for c in llm.calls if c["purpose"].startswith("repair")])
         self.assertEqual(len(result["attempts"]), 1)
 
+    def test_the_wait_for_the_test_writer_is_recorded(self):
+        result = self.run_quiet(NOTES, self.out, llm=golden_llm(), tools=tools(reports=[GREEN]))
+        self.assertIn("test_wait_seconds", result); self.assertIn("for the test writer", self.printed.getvalue())
+
     def test_tests_and_notes_are_made_once(self):
         llm = golden_llm(attempts=2)
         result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1), GREEN]))

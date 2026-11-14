@@ -49,6 +49,11 @@ def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict
     return {k: files[k] for k in files if k in keys}
 
 
+def shows_pages(report: CheckReport) -> bool:
+    """The server started and at least one page rendered (a frontend that crashes at render fails every smoke test)."""
+    return report.booted and not (report.smoke and report.smoke_passed == 0)
+
+
 def _meta(label: str, report: CheckReport) -> dict:
     return {"label": label, "rank": list(report.rank()), "built": report.built, "booted": report.booted,
             "scenarios_passed": report.scenario_passed, "scenarios_total": report.scenario_total,
@@ -77,8 +82,8 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
     note, without_gain = "", 0
     for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
-        # past the time limit only an app that does not start is still repaired: it would score 0 (v4 plan R2)
-        kind = "repair" if best.booted else "rescue"
+        # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
+        kind = "repair" if shows_pages(best) else "rescue"
         if best.all_green() or without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN or not budget.allows(kind):
             break
         files = ws.read_generated()

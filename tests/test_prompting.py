@@ -11,6 +11,7 @@ from tests.support import AGENT_ROOT, FIXTURES
 NOTES = FIXTURES / "specs" / "notes"
 PLAN_DOC = AGENT_ROOT.parent / "docs" / "3-arcflash" / "arcflash-plan.md"
 AMENDED = {"rules", "tests", "plan"}   # changed on evidence from the paid checks; see docs/3-arcflash/arcflash-changes.md
+ADDED = {"kept_files"}                 # added after the blueprint (docs/5-arcflash-v4/plan.md, review point 3)
 
 
 class PromptTests(unittest.TestCase):
@@ -44,9 +45,9 @@ class PromptTests(unittest.TestCase):
         text = PLAN_DOC.read_text(encoding="utf-8")
         appendix = text[text.index("# Appendix A: prompt texts"):text.index("# Appendix B: formats")]
         found = dict(re.findall(r"### A\.\d+ `([a-z_]+)\.md`[^\n]*\n\n```\n(.*?)\n```\n", appendix, re.S))
-        self.assertEqual(set(found), set(PROMPT_NAMES))
+        self.assertEqual(set(found), set(PROMPT_NAMES) - ADDED)
         for name in PROMPT_NAMES:
-            if name not in AMENDED:
+            if name not in AMENDED | ADDED:
                 self.assertEqual(load_prompt(name), found[name], name)
 
     def test_helpers_export_every_role_helper(self):

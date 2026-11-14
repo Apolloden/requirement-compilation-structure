@@ -47,12 +47,22 @@ class LLMTests(unittest.TestCase):
         c = self.make([api_error(503, "busy"), connection_error(), stream_chunks("ok")]).complete("x", None, "u", max_tokens=10)
         self.assertEqual((c.text, self.sleeps), ("ok", [15, 30]))
 
-    def test_error_while_reading_the_stream_is_retried(self):
+    def test_error_before_any_text_is_retried(self):
         def broken():
-            yield from stream_chunks("par", pieces=1)[:1]
             raise connection_error()
+            yield
         c = self.make([broken(), stream_chunks("whole")]).complete("x", None, "u", max_tokens=10)
         self.assertEqual((c.text, self.sleeps), ("whole", [15]))
+
+    def test_error_after_text_keeps_the_text_and_continues(self):
+        # v3 PrestaShop: 843 s of the plan phase are in no record, one attempt thrown away mid-answer and retried.
+        def broken():
+            yield from stream_chunks("line one\nline two", pieces=1)[:1]
+            raise connection_error()   # an idle read timeout or "peer closed connection" mid-answer
+        llm = self.make([broken(), stream_chunks("\nline three")])
+        c = llm.complete_long("plan", None, "u", max_tokens=10)
+        self.assertEqual((c.text, c.finish_reason, self.sleeps), ("line one\nline two\nline three", "stop", []))
+        self.assertEqual([r["finish"] for r in llm.usage.records()], ["cut", "stop"])
 
     def test_gives_up_after_the_last_wait(self):
         llm = self.make([api_error(503, "busy")] * 5)
@@ -106,6 +116,20 @@ class LLMTests(unittest.TestCase):
         self.assertEqual((c.text, c.finish_reason), ("line one\nline two\nline three", "stop"))
         self.assertEqual([r["purpose"] for r in llm.usage.records()], ["plan", "plan+1"])
         self.assertEqual(llm.usage.records()[0]["finish"], "cut")
+
+    def test_a_call_without_usage_is_estimated_from_characters(self):
+        # Review point 5: v3's longest calls (plan, frontend:main) had no usage record and counted as 0 tokens.
+        llm = self.make([cut_chunks("x" * 3600), stream_chunks("end")])
+        llm.complete_long("plan", None, "u" * 7200, max_tokens=10)
+        first = llm.usage.records()[0]
+        self.assertEqual((first["input"], first["cached"], first["output"], first["estimated"]), (2000, 0, 1000, True))
+        self.assertFalse(llm.usage.records()[1]["estimated"])
+
+    def test_a_cut_answer_that_is_already_whole_is_not_continued(self):
+        # Review point 7: a continuation of a whole JSON answer adds text, and json.loads then fails on "extra data".
+        llm = self.make([cut_chunks('{"a": 1}'), stream_chunks("never sent")])
+        c = llm.complete_long("plan", None, "u", max_tokens=10, done=lambda t: t.strip().endswith("}"))
+        self.assertEqual((c.text, c.finish_reason, len(self.client.requests)), ('{"a": 1}', "stop", 1))
 
     def test_a_cut_stream_without_text_is_retried(self):
         c = self.make([cut_chunks(""), stream_chunks("ok")]).complete("x", None, "u", max_tokens=10)

@@ -132,6 +132,18 @@ class GenerateTests(unittest.TestCase):
         files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
         self.assertEqual(files["frontend/src/shared.jsx"], second_shared); self.assertEqual(problems, [])
 
+    def test_the_re_ask_shows_the_files_already_kept(self):
+        # Review point 3: a re-ask that returns only the missing file must be written against the kept files.
+        llm = answers(**{"frontend:main-again": [pick("frontend/src/App.jsx", "frontend/src/pages/main.jsx")],
+                         "frontend:main": [pick("frontend/src/shared.jsx")]})
+        files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
+        user = call(llm, "frontend:main-again")["user"]
+        self.assertIn("These files from your previous answer are kept exactly as they are.", user)
+        kept = user.split("kept exactly as they are.")[1]
+        self.assertIn("=== frontend/src/shared.jsx ===\n" + golden_files()["frontend/src/shared.jsx"], kept)
+        self.assertNotIn("App.jsx ===", kept)
+        self.assertEqual(files["frontend/src/App.jsx"], golden_files()["frontend/src/App.jsx"]); self.assertEqual(problems, [])
+
     def test_tests_chunk_by_twenty_and_see_only_the_digest(self):
         tmp = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, tmp, True)
         data = yaml.safe_load((NOTES / "requirements.yaml").read_text())

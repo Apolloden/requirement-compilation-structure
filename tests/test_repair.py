@@ -109,6 +109,14 @@ class RepairTests(unittest.TestCase):
         self.run_loop(llm, [], budget={"rescue"}, first=report(0, built=False, booted=False))
         self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2"])
 
+    def test_a_white_page_gets_a_rescue_round_too(self):
+        # Review point 4: the backend answers /api/health, but the frontend crashes at render, so no page shows.
+        white = report(0)
+        white.smoke = [TestResult("smoke /", "smoke.spec.ts", "failed", error="Error: element not found")]
+        llm = FakeLLM({"repair:": ["no edits"] * 2})
+        self.run_loop(llm, [], budget={"rescue"}, first=white)
+        self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2"])
+
     def test_an_answer_without_edits_is_a_round_without_gain(self):
         llm = FakeLLM({"repair:": ["I cannot help.", "Still nothing."]})
         best, snap = self.run_loop(llm, [])

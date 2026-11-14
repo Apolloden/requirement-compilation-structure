@@ -226,7 +226,10 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
                 _say(f"attempt {n} failed: {e}")
                 continue
             if tests is None:
+                waited = clock()
                 tests, result["test_problems"] = _safe_result(tests_future, lambda e: ({}, [f"test writer failed: {e!r}"]))
+                result["test_wait_seconds"] = round(clock() - waited, 1)
+                _say(f"waited {result['test_wait_seconds']:.0f} s for the test writer")
             ws.reset_to_template()
             ws.write({**files, **tests})
             install = _safe_result(install_future, lambda e: ProcResult(127, repr(e), 0.0))

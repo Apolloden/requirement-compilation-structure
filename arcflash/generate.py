@@ -4,7 +4,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 from arcflash import config
-from arcflash.blocks import parse_file_blocks
+from arcflash.blocks import parse_file_blocks, render_files
 from arcflash.llm import LLMError
 from arcflash.plan import page_component
 from arcflash.prompting import build_context, fill, load_prompt
@@ -50,16 +50,21 @@ def stub_module(module_id: str, components: list[str]) -> str:
 
 def _ask(llm, purpose: str, system: str, user: str, expected: list[str], kind: str, temperature: float,
          background: bool = False) -> dict[str, str]:
-    """One call; the expected file blocks that are missing are asked for once more. When that second answer has every
-    expected file, it is used whole: its files were written together and fit each other (v4 plan R4)."""
+    """One call; the expected file blocks that are missing are asked for once more, showing the files already kept so
+    the new ones fit them. When the second answer has every expected file, it is used whole (v4 plan R4)."""
+    def whole(text: str) -> bool:
+        return all(k in parse_file_blocks(text) for k in expected)
+
     answer = llm.complete_long(purpose, system, user, max_tokens=config.MAX_TOKENS[kind], temperature=temperature,
-                               background=background)
+                               background=background, done=whole)
     files = {k: v for k, v in parse_file_blocks(answer.text).items() if k in expected}
     missing = [k for k in expected if k not in files]
     if missing:
-        again = llm.complete_long(f"{purpose}-again", system,
-                                  user + "\n\n" + fill(load_prompt("missing_files"), paths=", ".join(missing)),
-                                  max_tokens=config.MAX_TOKENS[kind], temperature=temperature, background=background)
+        task = fill(load_prompt("missing_files"), paths=", ".join(missing))
+        if files:
+            task += "\n\n" + fill(load_prompt("kept_files"), files=render_files(files))
+        again = llm.complete_long(f"{purpose}-again", system, user + "\n\n" + task, max_tokens=config.MAX_TOKENS[kind],
+                                  temperature=temperature, background=background, done=whole)
         more = {k: v for k, v in parse_file_blocks(again.text).items() if k in expected}
         if len(more) == len(expected):
             return more

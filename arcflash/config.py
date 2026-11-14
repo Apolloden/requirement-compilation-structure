@@ -27,6 +27,7 @@ MIN_RUN_COST_CNY = 2.0
 COST_PER_SCENARIO_CNY = 0.05
 RESTART_COST_SHARE = 0.6
 PLATFORM_COST_FACTOR = 2.0
+CHARS_PER_TOKEN = 3.6         # measured on v3 Ctrip and PrestaShop calls (3.56 to 3.69); used only when a call has no usage
 PRICES_CNY_PER_MILLION = {"input": 1.0, "cached": 0.02, "output": 4.0}
 SCENARIOS_PER_TEST_CALL = 20
 MAX_PAGES_PER_MODULE = 8

@@ -27,6 +27,7 @@ class Completion:
     output_tokens: int = 0
     reasoning_tokens: int = 0
     seconds: float = 0.0
+    estimated: bool = False       # no usage record arrived (cut stream, runaway stop): tokens counted from characters
 
 
 class LLMError(RuntimeError):
@@ -48,7 +49,8 @@ class Usage:
         with self._lock:
             self._records.append({"purpose": purpose, "input": completion.input_tokens, "cached": completion.cached_tokens,
                                   "output": completion.output_tokens, "reasoning": completion.reasoning_tokens,
-                                  "seconds": round(completion.seconds, 2), "finish": completion.finish_reason})
+                                  "seconds": round(completion.seconds, 2), "finish": completion.finish_reason,
+                                  "estimated": completion.estimated})
 
     def records(self) -> list[dict]:
         with self._lock:
@@ -135,8 +137,11 @@ class LLM:
         return self._request(purpose, _messages(system, user), max_tokens, json_mode, temperature)
 
     def complete_long(self, purpose: str, system: str | None, user: str, *, max_tokens: int,
-                      json_mode: bool = False, temperature: float = config.TEMPERATURE, background: bool = False) -> Completion:
-        """`background` calls (the test writer) wait for their own slots, never for those of the critical path."""
+                      json_mode: bool = False, temperature: float = config.TEMPERATURE, background: bool = False,
+                      done=None) -> Completion:
+        """`background` calls (the test writer) wait for their own slots, never for those of the critical path.
+        `done(text)` says whether a cut answer is already whole (the cut lost only the end of the stream); it is then
+        not continued, because a continuation of a whole answer adds text that breaks it."""
         messages = _messages(system, user)
         result = self._request(purpose, messages, max_tokens, json_mode, temperature, background=background)
         if result.finish_reason == "runaway":
@@ -146,6 +151,9 @@ class LLM:
         n = 0
         # "cut": the connection closed mid-answer (no finish reason, no usage); the text so far is kept and continued.
         while result.finish_reason in ("length", "cut") and n < config.MAX_CONTINUATIONS:
+            if result.finish_reason == "cut" and done is not None and done(result.text):
+                result.finish_reason = "stop"
+                break
             n += 1
             more = messages + [{"role": "assistant", "content": result.text}, {"role": "user", "content": config.CONTINUE_PROMPT}]
             # A continuation is a fragment, never a JSON object of its own, so JSON mode stays off for it.
@@ -213,6 +221,7 @@ class LLM:
                 error = e
             if not waits:
                 raise LLMError(f"{purpose}: gave up after {len(config.RETRY_WAITS)} waits: {error}") from error
+            print(f"[arcflash] {purpose}: retry in {waits[0]} s after {type(error).__name__}: {str(error)[:120]}", flush=True)
             self.sleep(waits.pop(0))
         self.usage.add(purpose, completion)
         self._log(purpose, messages, completion, image_note)
@@ -229,8 +238,11 @@ class LLM:
                     chunk = next(chunks)
                 except StopIteration:
                     break
-                except Exception as e:  # the partial answer is discarded and the request is retried
-                    raise _StreamError(str(e)) from e
+                except Exception as e:
+                    if not text:   # nothing arrived yet: the request is retried
+                        raise _StreamError(str(e)) from e
+                    finish = "cut"  # an idle timeout or a dropped connection mid-answer: keep the text, continue it
+                    break
                 if getattr(chunk, "usage", None):
                     usage = chunk.usage
                 for choice in getattr(chunk, "choices", None) or []:
@@ -253,7 +265,9 @@ class LLM:
             if not text:
                 raise _StreamError("the stream ended without an answer")
             finish = "cut"
-        return Completion(text=text, finish_reason=finish or "stop", seconds=time.monotonic() - started, **_usage_numbers(usage))
+        numbers = _usage_numbers(usage) if usage is not None else _estimated_numbers(kwargs["messages"], text)
+        return Completion(text=text, finish_reason=finish or "stop", seconds=time.monotonic() - started,
+                          estimated=usage is None, **numbers)
 
     def _log(self, purpose, messages, completion: Completion, image_note: str) -> None:
         if not self.log_dir:
@@ -270,6 +284,16 @@ class LLM:
                 "seconds": round(completion.seconds, 2), "finish": completion.finish_reason}
         with self._lock, open(self.log_dir / "calls.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(line) + "\n")
+
+
+def _estimated_numbers(messages: list[dict], text: str) -> dict:
+    """Tokens from characters for a call without a usage record; input counted as uncached, so the cost cap errs high."""
+    chars = 0
+    for m in messages:
+        content = m["content"]
+        chars += len(content) if isinstance(content, str) else sum(len(p.get("text", "")) for p in content)
+    return {"input_tokens": round(chars / config.CHARS_PER_TOKEN), "cached_tokens": 0,
+            "output_tokens": round(len(text) / config.CHARS_PER_TOKEN), "reasoning_tokens": 0}
 
 
 def _usage_numbers(usage) -> dict:
