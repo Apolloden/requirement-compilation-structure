@@ -32,6 +32,15 @@ def report_with_everything():
                        scenarios=scenarios, load_errors=["Error: tests/scenarios-2.spec.ts: SyntaxError"], browser_checked=True)
 
 
+def grouped_report(sizes):
+    """One failure group per size, in this order; group k fails on button Bk at line 40 of scenarios-1.spec.ts."""
+    scenarios = [TestResult(f"SCN-{k}-{i} t", "scenarios-1.spec.ts", "failed",
+                            error=f"Error: failure {k}\nCall log:\n  - waiting for getByRole('button', {{ name: 'B{k}' }})\n"
+                                  f"    at /tmp/h/tests/scenarios-1.spec.ts:40:7", url=f"http://127.0.0.1:1/p{k}")
+                 for k, size in enumerate(sizes) for i in range(size)]
+    return CheckReport(static_issues=[], built=True, booted=True, scenarios=scenarios, browser_checked=True)
+
+
 class CheckReportTests(unittest.TestCase):
     def test_parse_report_fixture(self):
         results, load_errors = parse_report(json.loads(REPORT.read_text()))
@@ -66,15 +75,36 @@ class CheckReportTests(unittest.TestCase):
         self.assertLessEqual(len(text), 2000)
         full = report_with_everything().to_prompt()
         self.assertEqual(full.count("FAILED: SCN-"), 2)
-        self.assertIn("(4 more tests failed with the same first error line: SCN-1 same failure, SCN-2 same failure, "
-                      "SCN-3 same failure, SCN-4 same failure)", full)
-        self.assertIn("SCENARIO TESTS: 1 of 7 passed.\nTest files that could not load:\n- Error: tests/scenarios-2.spec.ts: SyntaxError", full)
-        self.assertIn("FAILED: SCN-0 same failure (scenarios-1.spec.ts)\nError: locator.click", full)
+        self.assertIn("Same first error in: SCN-1 same failure, SCN-2 same failure, SCN-3 same failure, SCN-4 same failure", full)
+        self.assertIn("SCENARIO TESTS: 1 of 7 passed. 2 failure groups, largest first; fix the groups shown in full.\nTest files that could not load:\n- Error: tests/scenarios-2.spec.ts: SyntaxError", full)
+        self.assertIn("GROUP 1 (5 tests): Error: locator.click: Test timeout of 30000ms exceeded. | waiting for getByRole('link', "
+                      "{ name: 'Notes', exact: true })\nFAILED: SCN-0 same failure (scenarios-1.spec.ts)\nError: locator.click", full)
         self.assertIn("URL at failure: http://127.0.0.1:1/\nPage at failure (ARIA snapshot):\n- link \"Home\"", full)
         self.assertNotIn("x" * 2501, full)
         self.assertIn("- smoke /notes: Error: 2 elements with role link", full)
         self.assertTrue(full.rstrip().endswith("line"))
         self.assertEqual(full.split("SERVER LOG (last 40 lines):\n")[1].count("line"), 40)
+
+    def test_groups_are_sorted_by_test_count(self):
+        r = grouped_report([1, 4, 2, 3, 1])
+        self.assertEqual([len(g) for g in r.failure_groups()], [4, 3, 2, 1, 1])
+        self.assertEqual(r.failure_groups()[3][0].title, "SCN-0-0 t")   # equal counts keep their first appearance
+
+    def test_report_shows_the_three_biggest_groups_in_full_and_the_rest_in_one_line(self):
+        # v4: the top one or two failing lookups held 37 to 72% of the failures (docs/6-arclaser/evidence.md 3.1).
+        tests = "\n".join(f"// line {n}" for n in range(1, 61)) + "\n"
+        text = grouped_report([1, 4, 2, 3, 1]).to_prompt(test_files={"scenarios-1.spec.ts": tests})
+        self.assertIn("SCENARIO TESTS: 0 of 11 passed. 5 failure groups, largest first; fix the groups shown in full.", text)
+        for n, size, k in ((1, 4, 1), (2, 3, 3), (3, 2, 2)):
+            self.assertIn(f"GROUP {n} ({size} tests): Error: failure {k} | waiting for getByRole('button', {{ name: 'B{k}' }})\n"
+                          f"FAILED: SCN-{k}-0 t (scenarios-1.spec.ts)", text)
+        self.assertLess(text.index("GROUP 1 (4 tests)"), text.index("GROUP 2 (3 tests)"))
+        self.assertIn("Test code (scenarios-1.spec.ts, lines 31 to 50):\n  31 | // line 31\n", text)
+        self.assertIn("  40 | // line 40\n", text); self.assertNotIn("  51 | // line 51", text)
+        self.assertIn("OTHER FAILURE GROUPS (one line each):\n- (1 test) Error: failure 0 | waiting for getByRole('button', "
+                      "{ name: 'B0' })\n- (1 test) Error: failure 4 | waiting for getByRole('button', { name: 'B4' })", text)
+        self.assertEqual(text.count("FAILED: "), 3)
+        self.assertEqual([t.title for t in grouped_report([1, 4, 2, 3, 1]).focus_tests()][:2], ["SCN-1-0 t", "SCN-1-1 t"])
 
     def test_prompt_build_and_start_sections(self):
         r = CheckReport(static_issues=["x"], built=False, build_log="vite error\n" * 100)

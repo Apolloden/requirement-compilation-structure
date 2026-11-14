@@ -10,7 +10,7 @@ from tests.support import AGENT_ROOT, FIXTURES
 
 NOTES = FIXTURES / "specs" / "notes"
 PLAN_DOC = AGENT_ROOT.parent / "docs" / "3-arcflash" / "arcflash-plan.md"
-AMENDED = {"rules", "tests", "plan"}   # changed on evidence from the paid checks; see docs/3-arcflash/arcflash-changes.md
+AMENDED = {"rules", "tests", "plan", "repair"}   # changed on evidence; see docs/3-arcflash/arcflash-changes.md and docs/6-arclaser/arclaser-changes.md
 ADDED = {"kept_files"}                 # added after the blueprint (docs/5-arcflash-v4/plan.md, review point 3)
 
 

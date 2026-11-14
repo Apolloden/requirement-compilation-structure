@@ -168,6 +168,29 @@ class RepairTests(unittest.TestCase):
         with mock.patch.object(config, "REPAIR_CONTEXT_CHARS", 10):
             self.assertIn("tests/scenarios-1.spec.ts", repair_files(golden_files(), golden_plan(), green))
 
+    def test_repair_files_are_those_of_the_focus_groups(self):
+        # Task 4: the model sees the files of the three biggest failure groups, not every file (evidence.md 3.1).
+        from arcflash.harness import TestResult
+        plan = copy.deepcopy(golden_plan())
+        for m in ("more", "other", "rare"):
+            plan["pages"].append({"id": f"{m}_a", "route": f"/{m}", "title": "x", "layout": True, "module": m,
+                                  "reqs": [], "controls": [], "shows": [], "flows": []})
+            plan["modules"].append({"id": m, "pages": [f"{m}_a"]})
+        files = golden_files()
+        for m in ("more", "other", "rare"):
+            files[f"frontend/src/pages/{m}.jsx"] = "export function X() {}\n"
+        files["tests/scenarios-2.spec.ts"] = "// other tests\n"
+        def failing(k, n, path, spec):
+            return [TestResult(f"SCN-{k}-{i}", spec, "failed", error=f"Error: e{k}", url=f"http://127.0.0.1:1{path}") for i in range(n)]
+        r = report(0, total=0)
+        r.scenarios = failing(1, 3, "/more", "scenarios-1.spec.ts") + failing(2, 2, "/other", "scenarios-1.spec.ts") \
+            + failing(3, 2, "/notes", "scenarios-1.spec.ts") + failing(4, 1, "/rare", "scenarios-2.spec.ts")
+        keys = set(repair_files(files, plan, r))
+        self.assertEqual(keys, {"backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", MAIN,
+                                "frontend/src/pages/more.jsx", "frontend/src/pages/other.jsx", "tests/scenarios-1.spec.ts"})
+        r.static_issues = ['button "Go" (page rare_a) does not appear in the frontend code']
+        self.assertIn("frontend/src/pages/rare.jsx", repair_files(files, plan, r))
+
     def test_large_apps_send_only_implicated_files(self):
         plan = copy.deepcopy(golden_plan())
         plan["pages"].append({"id": "more_a", "route": "/more/:id", "title": "x", "layout": True, "module": "more",

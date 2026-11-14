@@ -1,4 +1,4 @@
-"""Repair rounds: one call with all problems and the files, SEARCH/REPLACE edits, a full check, keep the best."""
+"""Repair rounds: one call aimed at the biggest failure groups and their files, SEARCH/REPLACE edits, a full check, keep the best."""
 from __future__ import annotations
 
 import re
@@ -33,19 +33,39 @@ def _modules_for_paths(plan: dict, paths: list[str]) -> set[str]:
     return owners
 
 
+PAGE_NAMED = re.compile(r"\(page ([a-z][a-z0-9_]*)\)")
+
+
+def _named_modules(app: dict[str, str], plan: dict, report: CheckReport) -> set[str]:
+    """Page modules a build error or static issue names, by file name or by "(page <id>)"."""
+    named = report.build_log + "\n" + "\n".join(report.static_issues)
+    keys = {k for k in app if k.startswith("frontend/src/pages/") and k.split("/")[-1] in named}
+    pages = set(PAGE_NAMED.findall(named))
+    keys |= {f"frontend/src/pages/{p.get('module')}.jsx" for p in plan.get("pages", [])
+             if isinstance(p, dict) and p.get("id") in pages}
+    return keys & set(app)
+
+
 def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict[str, str]:
-    """All app files plus the failing test files when they fit; otherwise only the implicated ones."""
-    failing_tests = {f"tests/{t.file}" for t in report.scenarios if t.status != "passed"} & set(files)
-    failing_tests |= {k for k in files if k.startswith("tests/") and any(i.startswith(k + " ") for i in report.static_issues)}
+    """The files a round needs. A running app: the shell, the page modules the FOCUS_GROUPS biggest failure groups ran
+    on, modules named in static issues, and the groups' test files (Task 4). An app that does not build or start: every
+    app file when they fit, otherwise the shell and the named modules."""
     app = {k: v for k, v in files.items() if not k.startswith("tests/")}
-    chosen = {**app, **{k: files[k] for k in sorted(failing_tests)}}
-    if sum(len(v) for v in chosen.values()) <= config.REPAIR_CONTEXT_CHARS:
-        return chosen
-    paths = [urlparse(t.url).path or "/" for t in report.scenarios if t.status != "passed" and t.url]
+    named_tests = {k for k in files if k.startswith("tests/") and any(i.startswith(k + " ") for i in report.static_issues)}
+    if not report.booted:
+        if sum(len(v) for v in app.values()) <= config.REPAIR_CONTEXT_CHARS:
+            keys = set(app) | named_tests
+        else:
+            keys = set(SHELL) | _named_modules(app, plan, report) | named_tests
+        return {k: files[k] for k in files if k in keys}
+    focus = report.focus_tests()
+    tests = ({f"tests/{t.file}" for t in focus} & set(files)) | named_tests
+    paths = [urlparse(t.url).path or "/" for t in focus if t.url]
     paths += [t.title.removeprefix("smoke ") for t in report.smoke if t.status != "passed"]
-    keys = set(SHELL) | _modules_for_paths(plan, paths) | failing_tests
-    named = report.build_log + "\n" + "\n".join(report.static_issues)   # a module named in a build error or static issue
-    keys |= {k for k in app if k.startswith("frontend/src/pages/") and k.split("/")[-1] in named}
+    modules = (_modules_for_paths(plan, paths) | _named_modules(app, plan, report)) & set(app)
+    if not modules and sum(len(v) for v in app.values()) <= config.REPAIR_CONTEXT_CHARS:
+        modules = {k for k in app if k.startswith("frontend/src/pages/")}   # no URL to go by: every module that fits
+    keys = set(SHELL) | modules | tests
     return {k: files[k] for k in files if k in keys}
 
 
@@ -89,8 +109,9 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
             break
         files = ws.read_generated()
         purpose = f"repair:{label}.{n}"
+        tests = {k.removeprefix("tests/"): v for k, v in files.items() if k.startswith("tests/")}
         task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
-                    problems=best.to_prompt())
+                    problems=best.to_prompt(test_files=tests))
         try:
             answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=config.MAX_TOKENS["repair"],
                                        stop_when=RepeatGuard(), continue_cut=False)

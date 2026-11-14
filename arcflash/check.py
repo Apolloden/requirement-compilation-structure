@@ -16,14 +16,38 @@ LOG_LINES = 60
 ERROR_LINES = 15
 ARIA_CHARS = 2500
 LOCATOR_LINE = re.compile(r"^\s*(?:- )?(?:waiting for |Locator: )")
+TEST_CODE_LINES = 20
+TITLES_PER_GROUP = 10
 
 
 def _group_key(error: str) -> tuple[str, str]:
     """First error line plus the element it was about: Playwright's first line alone is often generic."""
     lines = [l.strip() for l in error.splitlines() if l.strip()]
     first = lines[0] if lines else ""
-    locator = next((l for l in lines if LOCATOR_LINE.match(l)), "")
+    locator = next((l for l in lines if LOCATOR_LINE.match(l)), "").removeprefix("- ")
     return first, locator
+
+
+def _group_line(key: tuple[str, str]) -> str:
+    return " | ".join(part for part in key if part)
+
+
+def _plural(n: int) -> str:
+    return f"{n} test" + ("" if n == 1 else "s")
+
+
+def _test_code(test: TestResult, test_files: dict[str, str]) -> str:
+    """TEST_CODE_LINES numbered lines of the test file around the failing line the error's stack names."""
+    source = test_files.get(test.file)
+    found = re.search(rf"{re.escape(test.file)}:(\d+)", test.error) if source else None
+    if not found:
+        return ""
+    lines = source.splitlines()
+    line = int(found.group(1))
+    start = max(1, line - TEST_CODE_LINES // 2 + 1)
+    end = min(len(lines), start + TEST_CODE_LINES - 1)
+    numbered = "\n".join(f"{n:4d} | {lines[n - 1]}" for n in range(start, end + 1))
+    return f"Test code ({test.file}, lines {start} to {end}):\n{numbered}"
 
 
 @dataclass
@@ -59,17 +83,30 @@ class CheckReport:
         return (self.built and self.booted and not self.static_issues and not self.load_errors
                 and all(t.status == "passed" for t in self.smoke + self.scenarios))
 
-    def _scenario_section(self) -> str:
-        lines = [f"SCENARIO TESTS: {self.scenario_passed} of {self.scenario_total} passed."]
-        if self.load_errors:
-            lines.append("Test files that could not load:")
-            lines += [f"- {e}" for e in self.load_errors]
+    def failure_groups(self) -> list[list[TestResult]]:
+        """Failing scenario tests grouped by first error line and element, largest group first (stable)."""
         groups: dict[tuple[str, str], list[TestResult]] = {}
         for t in self.scenarios:
             if t.status != "passed":
                 groups.setdefault(_group_key(t.error), []).append(t)
-        for tests in groups.values():
+        return sorted(groups.values(), key=len, reverse=True)
+
+    def focus_tests(self) -> list[TestResult]:
+        """The failing tests of the FOCUS_GROUPS biggest groups: what a repair round aims at."""
+        return [t for group in self.failure_groups()[:config.FOCUS_GROUPS] for t in group]
+
+    def _scenario_section(self, test_files: dict[str, str]) -> str:
+        groups = self.failure_groups()
+        head = f"SCENARIO TESTS: {self.scenario_passed} of {self.scenario_total} passed."
+        if groups:
+            head += f" {len(groups)} failure group{'' if len(groups) == 1 else 's'}, largest first; fix the groups shown in full."
+        lines = [head]
+        if self.load_errors:
+            lines.append("Test files that could not load:")
+            lines += [f"- {e}" for e in self.load_errors]
+        for n, tests in enumerate(groups[:config.FOCUS_GROUPS], 1):
             t = tests[0]
+            lines.append(f"GROUP {n} ({_plural(len(tests))}): {_group_line(_group_key(t.error))}")
             lines.append(f"FAILED: {t.title} ({t.file})")
             if t.error:
                 lines.append("\n".join(t.error.splitlines()[:ERROR_LINES]))
@@ -77,13 +114,21 @@ class CheckReport:
                 lines.append(f"URL at failure: {t.url}")
             if t.aria:
                 lines.append("Page at failure (ARIA snapshot):\n" + t.aria[:ARIA_CHARS])
+            code = _test_code(t, test_files)
+            if code:
+                lines.append(code)
             if len(tests) > 1:
-                titles = ", ".join(other.title for other in tests[1:])
-                lines.append(f"({len(tests) - 1} more tests failed with the same first error line: {titles})")
+                others = [o.title for o in tests[1:]]
+                more = f" (and {len(others) - TITLES_PER_GROUP} more)" if len(others) > TITLES_PER_GROUP else ""
+                lines.append("Same first error in: " + ", ".join(others[:TITLES_PER_GROUP]) + more)
+        if len(groups) > config.FOCUS_GROUPS:
+            lines.append("OTHER FAILURE GROUPS (one line each):")
+            lines += [f"- ({_plural(len(g))}) {_group_line(_group_key(g[0].error))}" for g in groups[config.FOCUS_GROUPS:]]
         return "\n".join(lines)
 
-    def to_prompt(self, max_chars: int = config.REPORT_CHARS) -> str:
-        """The problem text of Appendix B.4, most important first, cut at max_chars."""
+    def to_prompt(self, max_chars: int = config.REPORT_CHARS, test_files: dict[str, str] | None = None) -> str:
+        """The problem text of Appendix B.4, most important first, cut at max_chars. `test_files` (file name → source)
+        adds the lines around each shown group's failing test line."""
         sections = []
         if not self.built:
             sections.append("BUILD FAILED (npm run build). Last lines:\n" + proc.tail(self.build_log, LOG_LINES))
@@ -96,7 +141,7 @@ class CheckReport:
             sections.append("PAGE CHECK (each planned page opened directly):\n" + "\n".join(
                 f"- {t.title}: " + "\n  ".join(t.error.splitlines()[:3]) for t in failed_smoke))
         if self.browser_checked and (self.scenarios or self.load_errors):
-            sections.append(self._scenario_section())
+            sections.append(self._scenario_section(test_files or {}))
         if self.server_log.strip():
             sections.append(f"SERVER LOG (last {SERVER_LOG_LINES} lines):\n" + proc.tail(self.server_log, SERVER_LOG_LINES))
         text = "\n\n".join(sections)
