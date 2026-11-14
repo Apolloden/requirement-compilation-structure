@@ -78,9 +78,9 @@ RUNTIME = re.compile(r"\{|<[^<>]+>")
 
 
 def _runtime(name: str, spec: Spec) -> bool:
-    """A name filled in at runtime: a {template} always (the input format writes placeholders so), a <value> unless the
-    requirement text has it literally (Review Focus 4)."""
-    return "{" in name or (bool(RUNTIME.search(name)) and name not in spec.corpus)
+    """A name filled in at runtime: {x} and <x> always (the input format writes placeholders so: "{item name}",
+    "Answer by <display name>"). Square brackets, as in grader names "Book 5.1 [run-w0-case]", stay (Review Focus 4)."""
+    return bool(RUNTIME.search(name))
 
 
 def validate_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:

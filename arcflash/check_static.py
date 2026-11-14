@@ -323,6 +323,9 @@ def area_issues(files: dict[str, str], plan: dict) -> list[str]:
                 # an occurrence inside a component that the area renders (<Row /> in the span) counts as inside
                 used = {m.group(1) for a, _, b in spans for m in re.finditer(r"<([A-Z][\w]*)", src[a:b])}
                 inside = any(o <= p < b for p in places for _, o, b in spans) or any(_component_at(src, p) in used for p in places)
+                # a list the area builds from data (.map) with the name as a data value: not judged, like Task 11
+                inside = inside or (any(".map(" in src[o:b] for _, o, b in spans)
+                                    and re.search(rf"(?<!=)(?<!=\{{)([\"'`]){n}\1", src) is not None)   # not an attribute
                 if spans and places and not inside:
                     issues.append(f'{c.get("role")} "{name}" is outside {area_role} "{area}" in {key}; '
                                   'render it inside that element (the requirement puts it there)')
@@ -455,14 +458,15 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
                     if (method, normalize_api_path(api["path"])) not in routes:
                         issues.append(f"plan API {method} {api['path']} is not implemented in backend/app.js")
 
-    # 8: every planned name appears in the frontend code
+    # 8: every planned name appears in the frontend code, or in the backend that seeds it (a value from the database)
     sources = list(frontend.values())
+    name_sources = sources + ([backend] if backend is not None else [])
     layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
     named = [(c, "layout") for c in layout.get("controls", []) if isinstance(c, dict)]
     named += [(c, f"page {p.get('id')}") for p in pages for c in p.get("controls", []) if isinstance(c, dict)]
     for control, where in named:
         name = str(control.get("name", ""))
-        if name.strip() and not _name_present(name, sources):
+        if name.strip() and not _name_present(name, name_sources):
             issues.append(f'{control.get("role")} "{name}" ({where}) does not appear in the frontend code')
 
     # 8-placeholder: a field named with hint text is also found by its placeholder (rule 3, evidence.md C3)

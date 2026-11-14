@@ -279,6 +279,22 @@ class MenuCheckTests(unittest.TestCase):
             '      <Link to="/notes/new" className="inline-block rounded bg-blue-700 px-3 py-1 text-white">Create Note</Link>\n', "")
         self.assertEqual(self.inside(files), [])
 
+    def test_a_list_built_from_data_inside_the_area_is_not_judged(self):
+        # Stack Overflow lane: tabs ["Summary", "Badges", ...].map(...) inside <nav aria-label="Activity navigation">
+        # gave 11 false reports in every repair round.
+        files = changed(MAIN, '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">',
+                        '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">'
+                        '{TABS.map((t) => <Link key={t} to="/notes/new">{t}</Link>)}')
+        files[MAIN] = 'const TABS = ["Create Note"];\n' + files[MAIN]
+        self.assertEqual(self.inside(files), [])
+
+    def test_a_name_seeded_by_the_backend_counts_as_present(self):
+        # Stack Overflow lane: seeded titles and tags are rendered from the database, never written in the frontend.
+        plan = golden_plan(); page_of(plan, "notes")["controls"].append({"role": "link", "name": "Welcome note", "when": "always"})
+        self.assertIn('link "Welcome note" (page notes) does not appear in the frontend code', static_issues(golden_files(), plan))
+        files = changed("backend/app.js", "export function registerApi", 'const SEED = ["Welcome note"];\nexport function registerApi')
+        self.assertNotIn('link "Welcome note" (page notes) does not appear in the frontend code', static_issues(files, plan))
+
     def test_an_area_rendered_by_a_component_is_skipped(self):
         files = changed(MAIN, '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">',
                         '<Panel aria-label="Note list" className="rounded border border-gray-200 bg-white">')

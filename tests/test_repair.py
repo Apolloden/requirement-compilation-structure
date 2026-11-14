@@ -231,6 +231,9 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(keys, {"backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", MAIN,
                                 "frontend/src/pages/more.jsx", "frontend/src/pages/other.jsx", "tests/scenarios-1.spec.ts"})
         r.static_issues = ['button "Go" (page rare_a) does not appear in the frontend code']
+        # a name the code never shows (often a value from the database) does not pull its module into every round
+        self.assertNotIn("frontend/src/pages/rare.jsx", repair_files(files, plan, r))
+        r.static_issues = ['frontend/src/pages/rare.jsx has a <form> without noValidate; add noValidate (rule 3)']
         self.assertIn("frontend/src/pages/rare.jsx", repair_files(files, plan, r))
 
     def test_large_apps_send_only_implicated_files(self):

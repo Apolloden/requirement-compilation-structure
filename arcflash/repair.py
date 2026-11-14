@@ -40,7 +40,8 @@ PAGE_NAMED = re.compile(r"\(page ([a-z][a-z0-9_]*)\)")
 
 def _named_modules(app: dict[str, str], plan: dict, report: CheckReport) -> set[str]:
     """Page modules a build error or static issue names, by file name or by "(page <id>)"."""
-    named = report.build_log + "\n" + "\n".join(report.static_issues)
+    # a name the code never shows is often a value from the database: it does not pull its module into every round
+    named = report.build_log + "\n" + "\n".join(i for i in report.static_issues if "does not appear in the frontend code" not in i)
     keys = {k for k in app if k.startswith("frontend/src/pages/") and k.split("/")[-1] in named}
     pages = set(PAGE_NAMED.findall(named))
     keys |= {f"frontend/src/pages/{p.get('module')}.jsx" for p in plan.get("pages", [])

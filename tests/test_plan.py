@@ -243,11 +243,21 @@ class PlanTests(unittest.TestCase):
         self.assertIn('link "Open {title}"', page(plan, "notes")["shows"]); self.assertEqual(notes, [])
 
     def test_a_bracketed_name_from_the_requirements_stays_a_control(self):
-        spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + '\n"Tag <draft>"(role=button) marks a draft.',
-                                   role_names=self.spec.role_names + [("button", "Tag <draft>")])
-        plan, notes = self.settled(lambda p: page(p, "note")["controls"].append({"role": "button", "name": "Tag <draft>", "when": "always"}), spec)
-        self.assertIn("Tag <draft>", [c["name"] for c in page(plan, "note")["controls"]])
+        # Review Focus 4: grader-style names carry square brackets ("Book 5.1 [run-w0-case]").
+        spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + '\n"Tag [draft]"(role=button) marks a draft.',
+                                   role_names=self.spec.role_names + [("button", "Tag [draft]")])
+        plan, notes = self.settled(lambda p: page(p, "note")["controls"].append({"role": "button", "name": "Tag [draft]", "when": "always"}), spec)
+        self.assertIn("Tag [draft]", [c["name"] for c in page(plan, "note")["controls"]])
         self.assertEqual(notes, [])
+
+    def test_an_angle_bracket_placeholder_from_the_requirements_is_a_runtime_name(self):
+        # Stack Overflow lane: "Answer by <display name>", "Comment <body>", "Tag <name>" are written in the spec as
+        # placeholders; planned as controls they never appear in the code and stayed static issues every round.
+        spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + '\nEach answer is a region named "Answer by <display name>".')
+        plan, notes = self.settled(lambda p: page(p, "note")["controls"].append(
+            {"role": "region", "name": "Answer by <display name>", "when": "per answer"}), spec)
+        self.assertNotIn("Answer by <display name>", [c["name"] for c in page(plan, "note")["controls"]])
+        self.assertIn('region "Answer by <display name>"', page(plan, "note")["shows"])
 
     def test_exact_duplicates_go_and_different_when_stays(self):
         def change(p):
