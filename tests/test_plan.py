@@ -35,7 +35,7 @@ def without_req_1_3(plan):
 
 def nine_pages(plan):
     for i in range(5):
-        plan["pages"].append({"id": f"extra_{i}", "route": f"/extra/{i}", "title": "Notes", "layout": True, "module": "main",
+        plan["pages"].append({"id": f"extra_{i}", "route": f"/extra/{i}", "title": "Notes", "layout": True, "module": "m1",
                               "reqs": [], "controls": [], "shows": [], "flows": []})
         plan["modules"][0]["pages"].append(f"extra_{i}")
 
@@ -80,7 +80,7 @@ class PlanTests(unittest.TestCase):
             ("module missing", lambda p: page(p, "note").update(module="other"), 'page note: module "other" does not exist'),
             ("in no module", lambda p: p["modules"][0]["pages"].remove("note"), "modules: page note is in no module"),
             ("in two modules", lambda p: p["modules"].append({"id": "more", "pages": ["note"]}), "modules: page note is in more than one module"),
-            ("too many pages", nine_pages, "module main has 9 pages; at most 8"),
+            ("too many pages", nine_pages, "module m1 has 9 pages; at most 6"),
             ("table twice", lambda p: p["tables"].append(dict(p["tables"][0])), 'tables: name "notes" is used twice'),
             ("no columns", lambda p: p["tables"][0].update(columns=[]), "table notes needs at least one column"),
         ]
@@ -149,36 +149,49 @@ class PlanTests(unittest.TestCase):
         self.assertEqual((llm.calls[0]["method"], llm.calls[0]["max_tokens"], llm.calls[0]["temperature"]),
                          ("complete_long", config.MAX_TOKENS["plan"], 0.2))
 
-    def test_module_membership_is_settled_by_code(self):
-        # v3 Ctrip: 21 pages said "module": "main" while the module list put them elsewhere (plan.md R6).
-        def moved(p):
-            p["modules"][0]["pages"].remove("note")
-            p["modules"].append({"id": "more", "pages": ["note"]})   # the list says "more", the page still says "main"
-        def unlisted(p):
-            p["modules"][0]["pages"].remove("note")                    # in no list; the page names "main"
-        for name, change, module, listed in (("list wins", moved, "more", ["note"]), ("joins its module", unlisted, "main", None)):
-            with self.subTest(name):
-                llm = FakeLLM({"plan": [json.dumps(mutated(change))]})
-                plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
-                self.assertEqual((problems, len(llm.calls)), ([], 1))
-                self.assertEqual(page(plan, "note")["module"], module)
-                self.assertIn("note", next(m for m in plan["modules"] if m["id"] == module)["pages"])
-
-    def test_an_overfull_module_is_split_in_list_order(self):
-        # v3 12306: one module "main" with 19 pages reached code generation (13 problems left after the fix rounds);
-        # one frontend call wrote all 19 pages and the first check fell from 49 (v2) to 28 of 142.
-        plan = mutated(nine_pages)                              # "main" lists 9 pages
-        plan["modules"][0]["pages"].remove("note")              # 8 listed, "note" in no list but names "main"
-        plan["modules"].append({"id": "main_2", "pages": []})   # an id already taken is skipped
-        listed = [p for p in plan["modules"][0]["pages"]] + ["note"]
+    # Task 8: modules follow requirement groups (evidence.md 3.3: 12306's booking and payment pages were split apart).
+    @staticmethod
+    def grouped(*pages):
+        """A plan whose pages are (id, reqs) in list order; the first page is the home page "/"."""
+        plan = golden_plan()
+        plan["pages"] = [{"id": pid, "route": "/" if n == 0 else f"/{pid}", "title": "x", "layout": True, "module": "any",
+                          "reqs": reqs, "controls": [], "shows": [], "flows": []} for n, (pid, reqs) in enumerate(pages)]
+        plan["modules"] = [{"id": "any", "pages": [pid for pid, _ in pages]}]
         settle_modules(plan)
-        ids = [m["id"] for m in plan["modules"]]
-        self.assertEqual(ids, ["main", "main_3", "main_2"])                                     # a chunk follows its module
-        self.assertEqual(plan["modules"][0]["pages"] + plan["modules"][1]["pages"], listed)   # list order kept
-        self.assertEqual(len(plan["modules"][0]["pages"]), config.MAX_PAGES_PER_MODULE)
-        self.assertEqual(page(plan, "note")["module"], "main_3")
-        problems = validate_plan(plan, self.spec)
-        self.assertFalse([p for p in problems if "module" in p or "pages;" in p], problems)
+        return [m["pages"] for m in plan["modules"]], {p["id"]: p["module"] for p in plan["pages"]}, [m["id"] for m in plan["modules"]]
+
+    def test_pages_of_one_requirement_group_share_a_module(self):
+        pages = [("home", ["REQ-1.1"])] + [(f"a{i}", ["REQ-2.1"]) for i in range(3)] + [(f"b{i}", ["REQ-3.1"]) for i in range(3)] \
+            + [("pay", ["REQ-2.4.1", "REQ-3.1"])]   # most of its reqs: tie, the first listed (REQ-2) wins
+        modules, owner, ids = self.grouped(*pages)
+        self.assertEqual(modules, [["home"], ["a0", "a1", "a2", "pay"], ["b0", "b1", "b2"]])
+        self.assertEqual((owner["pay"], owner["b0"], ids), ("m2", "m3", ["m1", "m2", "m3"]))
+
+    def test_small_groups_join_the_previous_module(self):
+        modules, _, _ = self.grouped(("home", ["REQ-1.1"]), ("a0", ["REQ-2.1"]), ("a1", ["REQ-2.2"]), ("a2", ["REQ-2.3"]),
+                                     ("b0", ["REQ-3.1"]), ("c0", ["REQ-4.1"]), ("c1", ["REQ-4.1"]), ("c2", ["REQ-4.1"]))
+        # home (1 page) has no module before it; b0 (1 page) joins a*; c* (3 pages) stays
+        self.assertEqual(modules, [["home"], ["a0", "a1", "a2", "b0"], ["c0", "c1", "c2"]])
+        self.assertEqual(config.MAX_PAGES_PER_MODULE, 6)
+
+    def test_a_group_over_the_limit_is_split_in_list_order(self):
+        modules, owner, _ = self.grouped(("home", ["REQ-1.1"]), *[(f"a{i}", ["REQ-2.1"]) for i in range(9)])
+        self.assertEqual(modules, [["home"], [f"a{i}" for i in range(6)], ["a6", "a7", "a8"]])
+        self.assertEqual(owner["a6"], "m3")
+
+    def test_the_home_page_is_in_the_first_module(self):
+        plan = golden_plan()
+        plan["pages"] = [{"id": "a", "route": "/a", "layout": True, "module": "x", "reqs": ["REQ-2.1"], "controls": []},
+                         {"id": "home", "route": "/", "layout": True, "module": "x", "reqs": ["REQ-1.1"], "controls": []},
+                         {"id": "b", "route": "/b", "layout": True, "module": "x", "reqs": ["REQ-1.2"], "controls": []}]
+        settle_modules(plan)
+        self.assertEqual(plan["modules"], [{"id": "m1", "pages": ["home", "b", "a"]}])   # "a" (1 page) joins the module before
+        self.assertEqual(next(p for p in plan["pages"] if p["id"] == "home")["module"], "m1")
+
+    def test_a_page_without_reqs_follows_the_page_before(self):
+        _, owner, _ = self.grouped(("home", ["REQ-1.1"]), ("a0", ["REQ-2.1"]), ("a1", ["REQ-2.1"]), ("a2", []),
+                                   ("b0", ["REQ-3.1"]), ("b1", ["REQ-3.1"]), ("b2", ["REQ-3.1"]))
+        self.assertEqual(owner["a2"], owner["a0"])
 
     # Task 7: the plan is settled by code; the plan-fix calls took 102 of 604 minutes in v4 (evidence.md 2.4).
     def test_one_plan_call_and_no_plan_fix(self):

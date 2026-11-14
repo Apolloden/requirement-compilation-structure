@@ -1,6 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { AppProvider, Layout } from "./shared.jsx";
-import { PageHome, PageNotes, PageNoteNew, PageNote } from "./pages/main.jsx";
+import { PageHome, PageNotes, PageNoteNew, PageNote } from "./pages/m1.jsx";
 
 export default function App() {
   return (

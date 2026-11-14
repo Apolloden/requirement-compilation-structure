@@ -1,7 +1,7 @@
 Task: {{what}} Fix only this error, with the smallest change. The log and the lines it names are below.
 
 Edit with SEARCH/REPLACE blocks. SEARCH copies lines exactly from the file, without the line numbers shown here:
-=== EDIT: frontend/src/pages/main.jsx ===
+=== EDIT: frontend/src/pages/m1.jsx ===
 <<<<<<< SEARCH
 (exact current lines)
 =======

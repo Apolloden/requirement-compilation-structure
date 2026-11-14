@@ -18,7 +18,7 @@ from tests.golden import golden_files, golden_plan
 from tests.support import FIXTURES
 
 NOTES = FIXTURES / "specs" / "notes"
-MAIN = "frontend/src/pages/main.jsx"
+MAIN = "frontend/src/pages/m1.jsx"
 
 
 def report(passed, total=3, built=True, booted=True, url="http://127.0.0.1:1/notes"):
@@ -61,12 +61,12 @@ class RepairTests(unittest.TestCase):
     def test_better_round_becomes_the_best(self):
         llm = FakeLLM({"repair:": [edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Fixed notebook.</p>")]})
         best, snap = self.run_loop(llm, [self.green])
-        self.assertEqual(snap.name, "a1-r1"); self.assertIn("Fixed", (self.ws.out / "frontend/src/pages/main.jsx").read_text())
+        self.assertEqual(snap.name, "a1-r1"); self.assertIn("Fixed", (self.ws.out / "frontend/src/pages/m1.jsx").read_text())
         self.assertTrue(best.all_green())
         c = llm.calls[0]
         self.assertEqual((c["purpose"], c["system"], c["max_tokens"]), ("repair:a1.1", load_prompt("rules"), config.MAX_TOKENS["repair"]))
         self.assertTrue(c["user"].startswith("CTX\n\nTask: the local check of the application found the problems below."))
-        self.assertIn("=== frontend/src/pages/main.jsx ===\n", c["user"]); self.assertIn("SCENARIO TESTS: 1 of 3 passed.", c["user"])
+        self.assertIn("=== frontend/src/pages/m1.jsx ===\n", c["user"]); self.assertIn("SCENARIO TESTS: 1 of 3 passed.", c["user"])
         self.assertNotIn("Your previous fix", c["user"])
         meta = json.loads((self.ws.versions / "a1-r1" / "meta.json").read_text())
         self.assertEqual((meta["scenarios_passed"], meta["built"]), (3, True))
@@ -92,8 +92,8 @@ class RepairTests(unittest.TestCase):
         best, snap = self.run_loop(llm, [self.green])
         self.assertEqual(llm.calls[1]["purpose"], "repair:a1.1.fix")
         self.assertIn("These edits could not be applied", llm.calls[1]["user"])
-        self.assertIn("frontend/src/pages/main.jsx: SEARCH text not found: <p>Not in the file.</p>", llm.calls[1]["user"])
-        self.assertIn(golden_files()["frontend/src/pages/main.jsx"], llm.calls[1]["user"])
+        self.assertIn("frontend/src/pages/m1.jsx: SEARCH text not found: <p>Not in the file.</p>", llm.calls[1]["user"])
+        self.assertIn(golden_files()["frontend/src/pages/m1.jsx"], llm.calls[1]["user"])
         self.assertTrue(llm.calls[1]["user"].startswith("CTX\n\nThese edits could not be applied:"))
         self.assertIn("Fixed notebook.", (self.ws.out / MAIN).read_text())
 
@@ -233,11 +233,11 @@ class RepairTests(unittest.TestCase):
         files = golden_files(); files["frontend/src/pages/more.jsx"] = "export function PageMoreA() {}\n"
         with mock.patch.object(config, "REPAIR_CONTEXT_CHARS", 10):
             keys = set(repair_files(files, plan, self.failing))
-            self.assertIn("frontend/src/pages/main.jsx", keys); self.assertNotIn("frontend/src/pages/more.jsx", keys)
+            self.assertIn("frontend/src/pages/m1.jsx", keys); self.assertNotIn("frontend/src/pages/more.jsx", keys)
             self.assertTrue({"backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "tests/scenarios-1.spec.ts"} <= keys)
             on_more = report(1, url="http://127.0.0.1:1/more/7?x=1")
             keys = set(repair_files(files, plan, on_more))
-            self.assertIn("frontend/src/pages/more.jsx", keys); self.assertNotIn("frontend/src/pages/main.jsx", keys)
+            self.assertIn("frontend/src/pages/more.jsx", keys); self.assertNotIn("frontend/src/pages/m1.jsx", keys)
 
 
 if __name__ == "__main__":

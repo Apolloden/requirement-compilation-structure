@@ -8,10 +8,9 @@ Shape, with example values to replace:
   "seed": [{"table": "items", "rows": [{"name": "..."}], "source": "the requirement or scenario ID that says these rows exist"}],
   "api": [{"method": "GET", "path": "/api/items/:id", "request": {}, "response": "{\"item\": {\"id\": 1, \"name\": \"...\"}}", "errors": ["404 {\"error\": \"...\"}"], "reqs": ["REQ-..."]}],
   "layout": {"controls": [{"role": "link", "name": "...", "to": "/...", "when": "always"}]},
-  "pages": [{"id": "item_detail", "route": "/items/:id", "title": "...", "layout": true, "module": "main", "reqs": ["REQ-..."],
+  "pages": [{"id": "item_detail", "route": "/items/:id", "title": "...", "layout": true, "reqs": ["REQ-..."],
              "controls": [{"role": "button", "name": "...", "when": "always"}],
-             "shows": ["the item's name as an h1"], "flows": ["Save: PUT /api/items/:id, then open /items/:id"]}],
-  "modules": [{"id": "main", "pages": ["item_detail"]}]
+             "shows": ["the item's name as an h1"], "flows": ["Save: PUT /api/items/:id, then open /items/:id"]}]
 }
 
 Rules:
@@ -23,5 +22,4 @@ Rules:
 - No page lists the same role, name and "when" twice.
 - api: every read and write the pages need, as REST paths under /api with numeric ids written :id.
 - seed: only records the requirements say exist before a scenario starts. Write passwords in plain text here; the backend stores their hashes.
-- modules: a single module "main" when there are at most 8 pages; otherwise group related pages, at most 8 pages per module, with the home page in the first module. Module ids are lowercase snake_case.
 - The requirement text decides names and behavior. The screenshot notes add layout hints only.

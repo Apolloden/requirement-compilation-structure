@@ -86,6 +86,15 @@ class Workspace:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
 
+    def replace_app(self, files: dict[str, str]) -> None:
+        """The template, then the generated files; a template page module the generated app does not have is removed
+        (module ids are m1, m2, ...; the template's placeholder page would otherwise stay beside them)."""
+        self.reset_to_template()
+        for key in PLACEHOLDERS[3:]:
+            if key not in files:
+                self._disk(key).unlink(missing_ok=True)
+        self.write(files)
+
     def _generated_paths(self) -> dict[str, Path]:
         found = {}
         candidates = [self.out / k for k in PLACEHOLDERS[:3]] + sorted((self.out / "frontend/src/pages").glob("*.jsx"))

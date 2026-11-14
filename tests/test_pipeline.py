@@ -21,7 +21,7 @@ from tests.golden import golden_files, golden_plan
 from tests.support import AGENT_ROOT, FIXTURES, SAFE_ENV
 
 NOTES = FIXTURES / "specs" / "notes"
-MAIN = "frontend/src/pages/main.jsx"
+MAIN = "frontend/src/pages/m1.jsx"
 TESTS = "tests/scenarios-1.spec.ts"
 
 
@@ -48,7 +48,7 @@ def golden_llm(attempts=1, plan=None, frontends=None, repairs=4):
         "tests:": [as_blocks({TESTS: files[TESTS]})],
         "plan": plan if plan is not None else [json.dumps(golden_plan())] * attempts,
         "backend": [as_blocks({"backend/app.js": files["backend/app.js"]})] * attempts,
-        "frontend:main": frontends or [frontend_answer()] * attempts,
+        "frontend:m1": frontends or [frontend_answer()] * attempts,
         "repair:": ["no blocks"] * repairs,
     })
 
@@ -81,7 +81,7 @@ class PipelineTests(unittest.TestCase):
         llm = golden_llm()
         result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[GREEN]))
         self.assertEqual(result["shipped"]["source"], "a1-r0"); self.assertEqual(len(result["attempts"]), 1)
-        self.assertEqual((self.out / "frontend/src/pages/main.jsx").read_text(), golden_files()["frontend/src/pages/main.jsx"])
+        self.assertEqual((self.out / "frontend/src/pages/m1.jsx").read_text(), golden_files()["frontend/src/pages/m1.jsx"])
         self.assertTrue((self.out / ".arc/run.json").exists())
         saved = json.loads((self.out / ".arc/run.json").read_text())
         self.assertEqual(saved["shipped"], result["shipped"])
@@ -92,6 +92,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(json.loads((self.out / ".arc/notes.json").read_text()), {"reference/notes.png": "Layout: a list of notes."})
         self.assertEqual((self.out / ".arc/harness/tests/scenarios-1.spec.ts").read_text(), golden_files()[TESTS])
         self.assertIn("shipped a1-r0", self.printed.getvalue())
+        self.assertFalse((self.out / "frontend/src/pages/main.jsx").exists())   # no template page left beside the modules
         self.assertEqual(saved["agent"], "arclaser"); self.assertIn("[arclaser] shipped a1-r0", self.printed.getvalue())
 
     def test_restart_when_the_first_attempt_does_not_start(self):
@@ -218,7 +219,7 @@ class PipelineTests(unittest.TestCase):
             raise RuntimeError("check crashed")
         result = self.run_quiet(NOTES, self.out, llm=golden_llm(attempts=2), tools=tools(reports=[GREEN], on_check=crash))
         self.assertEqual(result["shipped"]["source"], "template")
-        self.assertIn("<h1>Application</h1>", (self.out / MAIN).read_text())
+        self.assertIn("<h1>Application</h1>", (self.out / "frontend/src/pages/main.jsx").read_text())   # the template's page
 
     def test_requirements_inside_the_output_folder(self):
         # The ARC-Bench layout: main.py /workspace/template/requirements --output-dir /workspace/template
@@ -227,7 +228,7 @@ class PipelineTests(unittest.TestCase):
         result = self.run_quiet(self.out / "requirements", self.out, llm=golden_llm(), tools=tools(reports=[GREEN]))
         self.assertEqual((result["shipped"]["source"], result["errors"]), ("a1-r0", []))
         for rel in ("requirements/requirements.yaml", "requirements/reference/notes.png", ".arc/runner-events.jsonl",
-                    "package.json", "deploy.sh", "backend/server.js", "frontend/src/pages/main.jsx"):
+                    "package.json", "deploy.sh", "backend/server.js", "frontend/src/pages/m1.jsx"):
             self.assertTrue((self.out / rel).exists(), rel)
 
     def test_an_output_path_that_is_a_file_ends_the_run(self):

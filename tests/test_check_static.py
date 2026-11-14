@@ -4,7 +4,7 @@ from arcflash.check_static import area_issues, backend_routes, frontend_api_call
 from tests.golden import golden_files, golden_plan
 
 APP = "backend/app.js"
-MAIN = "frontend/src/pages/main.jsx"
+MAIN = "frontend/src/pages/m1.jsx"
 ROUTES = "frontend/src/App.jsx"
 SHARED = "frontend/src/shared.jsx"
 
@@ -40,7 +40,7 @@ class StaticCheckTests(unittest.TestCase):
         self.assertEqual(normalize_api_path("/"), "/")
 
     def test_frontend_calls(self):
-        src = {"frontend/src/pages/main.jsx": "api.get(`/api/notes/${id}`); api.post(\"/api/notes\", b); api.del('/api/notes/' + id)"}
+        src = {"frontend/src/pages/m1.jsx": "api.get(`/api/notes/${id}`); api.post(\"/api/notes\", b); api.del('/api/notes/' + id)"}
         self.assertEqual(frontend_api_calls(src), {("GET", "/api/notes/:p"), ("POST", "/api/notes"), ("DELETE", "/api/notes/:p")})
 
     def test_frontend_calls_read_concatenation_and_queries(self):
@@ -61,7 +61,7 @@ class StaticCheckTests(unittest.TestCase):
             ("no registerApi", changed(APP, "export function registerApi", "function registerApi"), golden_plan(),
              "backend/app.js does not export registerApi"),
             ("no component", changed(MAIN, "export function PageNote(", "function PageNote("), golden_plan(),
-             "frontend/src/pages/main.jsx does not export PageNote"),
+             "frontend/src/pages/m1.jsx does not export PageNote"),
             ("no route", changed(ROUTES, '"/notes/new"', '"/notes/create"'), golden_plan(),
              'frontend/src/App.jsx has no route "/notes/new"'),
             ("unknown call", changed(MAIN, "  async function remove() {", '  api.post("/api/notes/" + id + "/tags", {});\n  async function remove() {'),
@@ -73,15 +73,15 @@ class StaticCheckTests(unittest.TestCase):
              'region "Note list" (page notes) does not appear in the frontend code'),
             ("layout control", golden_files(), plan_layout, 'link "Archive" (layout) does not appear in the frontend code'),
             ("window.confirm", changed(MAIN, "  async function remove() {", '  if (window.confirm("x")) {}\n  async function remove() {'),
-             golden_plan(), "frontend/src/pages/main.jsx uses window.confirm; use an in-page role=dialog or role=alert instead"),
+             golden_plan(), "frontend/src/pages/m1.jsx uses window.confirm; use an in-page role=dialog or role=alert instead"),
             ("bare alert", changed(MAIN, "  async function remove() {", '  alert("x");\n  async function remove() {'),
-             golden_plan(), "frontend/src/pages/main.jsx uses window.alert; use an in-page role=dialog or role=alert instead"),
+             golden_plan(), "frontend/src/pages/m1.jsx uses window.alert; use an in-page role=dialog or role=alert instead"),
             ("date input", changed(MAIN, '<input id="note-title" type="text"', '<input id="note-title" type="date"'), golden_plan(),
-             'frontend/src/pages/main.jsx uses an input of type "date"; use type="text" (rule 3)'),
+             'frontend/src/pages/m1.jsx uses an input of type "date"; use type="text" (rule 3)'),
             ("uuid import", changed(APP, "const CLOCK_START", 'import { v4 } from "uuid";\nconst CLOCK_START'), golden_plan(),
              'backend/app.js imports "uuid", which is not installed; use only the fixed stack'),
             ("backend package in frontend", changed(MAIN, 'import { api } from "../api.js";', 'import { api } from "../api.js";\nimport express from "express";'),
-             golden_plan(), 'frontend/src/pages/main.jsx imports "express", which is not installed; use only the fixed stack'),
+             golden_plan(), 'frontend/src/pages/m1.jsx imports "express", which is not installed; use only the fixed stack'),
         ]
         for name, files, plan, expected in cases:
             with self.subTest(name):
@@ -91,19 +91,19 @@ class StaticCheckTests(unittest.TestCase):
         # Seen in both BookStack-lite runs: the header link again as a breadcrumb on detail pages, which the page
         # check never opens because their routes have parameters.
         files = changed(MAIN, "<article className=\"space-y-3\">", "<article className=\"space-y-3\">\n      <Link to=\"/notes\">\n        Notes\n      </Link>")
-        self.assertIn('frontend/src/pages/main.jsx repeats the layout link "Notes"; the layout already shows it on every page (rule 5)',
+        self.assertIn('frontend/src/pages/m1.jsx repeats the layout link "Notes"; the layout already shows it on every page (rule 5)',
                       static_issues(files, golden_plan()))
         self.assertEqual(static_issues(golden_files(), golden_plan()), [])   # the heading "Notes" is not a link
 
     def test_layout_button_repeated_in_a_page_file(self):
         plan = golden_plan(); plan["layout"]["controls"].append({"role": "button", "name": "Delete", "when": "always"})
-        self.assertIn('frontend/src/pages/main.jsx repeats the layout button "Delete"; the layout already shows it on every page (rule 5)',
+        self.assertIn('frontend/src/pages/m1.jsx repeats the layout button "Delete"; the layout already shows it on every page (rule 5)',
                       static_issues(golden_files(), plan))
 
     def test_form_without_novalidate(self):
         # P2: the browser's own validation blocked a submit silently; role-based tests never see its bubbles.
         files = changed(MAIN, "<form noValidate onSubmit={save}", "<form onSubmit={save}")
-        self.assertIn('frontend/src/pages/main.jsx has a <form> without noValidate; add noValidate and show problems with role="alert" (rule 3)',
+        self.assertIn('frontend/src/pages/m1.jsx has a <form> without noValidate; add noValidate and show problems with role="alert" (rule 3)',
                       static_issues(files, golden_plan()))
 
     def test_parameter_segment_matches_a_fixed_word(self):
@@ -131,7 +131,7 @@ class StaticCheckTests(unittest.TestCase):
     def test_unicode_control_names_are_found(self):
         plan = golden_plan(); plan["pages"][1]["controls"].append({"role": "button", "name": "下一步", "when": "always"})
         self.assertIn('button "下一步" (page notes) does not appear in the frontend code', static_issues(golden_files(), plan))
-        files = golden_files(); files["frontend/src/pages/main.jsx"] += "\nconst label = \"下一步\";\n"
+        files = golden_files(); files["frontend/src/pages/m1.jsx"] += "\nconst label = \"下一步\";\n"
         self.assertNotIn('button "下一步" (page notes) does not appear in the frontend code', static_issues(files, plan))
 
 
@@ -303,11 +303,11 @@ class FieldCheckTests(unittest.TestCase):
 
     def test_number_input_allowed_only_for_a_planned_spinbutton(self):
         files = changed(MAIN, '<input id="note-title" type="text"', '<input id="note-title" type="number"')
-        self.assertIn('frontend/src/pages/main.jsx uses an input of type "number"; use type="text" (rule 3)', static_issues(files, golden_plan()))
+        self.assertIn('frontend/src/pages/m1.jsx uses an input of type "number"; use type="text" (rule 3)', static_issues(files, golden_plan()))
         plan = golden_plan(); page_of(plan, "note_new")["controls"].append({"role": "spinbutton", "name": "Title", "when": "always"})
-        self.assertNotIn('frontend/src/pages/main.jsx uses an input of type "number"; use type="text" (rule 3)', static_issues(files, plan))
+        self.assertNotIn('frontend/src/pages/m1.jsx uses an input of type "number"; use type="text" (rule 3)', static_issues(files, plan))
         dated = changed(MAIN, '<input id="note-title" type="text"', '<input id="note-title" type="date"')
-        self.assertIn('frontend/src/pages/main.jsx uses an input of type "date"; use type="text" (rule 3)', static_issues(dated, plan))
+        self.assertIn('frontend/src/pages/m1.jsx uses an input of type "date"; use type="text" (rule 3)', static_issues(dated, plan))
 
 
 if __name__ == "__main__":

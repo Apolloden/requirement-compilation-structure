@@ -6,7 +6,7 @@ Task: the local check of the application found the problems below. Fix the cause
 - Write each SEARCH/REPLACE pair once. Stop when the groups shown in full are fixed.
 {{previous_note}}
 Edit with SEARCH/REPLACE blocks. SEARCH copies lines exactly from the current file, is as short as possible and matches one place only. One EDIT block may hold several pairs:
-=== EDIT: frontend/src/pages/main.jsx ===
+=== EDIT: frontend/src/pages/m1.jsx ===
 <<<<<<< SEARCH
 (exact current lines)
 =======

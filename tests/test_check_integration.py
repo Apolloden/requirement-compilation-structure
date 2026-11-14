@@ -14,7 +14,7 @@ from tests.golden import golden_files, golden_plan
 from tests.support import FIXTURES, integration
 
 NOTES = FIXTURES / "specs" / "notes"
-MAIN = "frontend/src/pages/main.jsx"
+MAIN = "frontend/src/pages/m1.jsx"
 
 
 @integration

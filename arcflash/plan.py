@@ -29,7 +29,7 @@ def _dicts(items) -> list[dict]:
 
 def _shape_problems(plan: dict) -> list[str]:
     problems = [f"plan.{key} must be an object" for key in ("app", "layout") if not isinstance(plan.get(key), dict)]
-    problems += [f"plan.{key} must be a list" for key in ("tables", "api", "pages", "modules") if not isinstance(plan.get(key), list)]
+    problems += [f"plan.{key} must be a list" for key in ("tables", "api", "pages") if not isinstance(plan.get(key), list)]
     if isinstance(plan.get("layout"), dict) and not isinstance(plan["layout"].get("controls"), list):
         problems.append("plan.layout.controls must be a list")
     return problems
@@ -88,7 +88,7 @@ def validate_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
     problems = _shape_problems(plan)
     if problems:
         return problems
-    pages, apis, modules, tables = _dicts(plan["pages"]), _dicts(plan["api"]), _dicts(plan["modules"]), _dicts(plan["tables"])
+    pages, apis, modules, tables = _dicts(plan["pages"]), _dicts(plan["api"]), _dicts(plan.get("modules", [])), _dicts(plan["tables"])
     layout_controls = _dicts(plan["layout"]["controls"])
 
     # 2-3: page ids and routes
@@ -206,40 +206,56 @@ def _parse(text: str) -> dict:
     return data
 
 
+TOP_GROUP = re.compile(r"^(REQ-\d+)")
+
+
+def _page_group(page: dict) -> str | None:
+    """The top-level requirement group (REQ-8 for REQ-8.3.1) most of the page's reqs belong to; ties go to the first."""
+    groups = [m.group(1) for r in page.get("reqs", []) if isinstance(r, str) and (m := TOP_GROUP.match(r))]
+    return max(dict.fromkeys(groups), key=groups.count) if groups else None
+
+
 def settle_modules(plan: dict) -> None:
-    """Make the module lists and each page's "module" agree, in place, without a model call (v4 plan R6):
-    the list wins; a page that no list has joins the module it names; a module over MAX_PAGES_PER_MODULE is split
-    in list order into new modules ("main", "main_2", ...). Code generation reads the lists, the checks and the repair
-    file choice read page["module"]; after this both say the same."""
-    if not isinstance(plan.get("pages"), list) or not isinstance(plan.get("modules"), list):
+    """Modules by requirement group, in place and without a model call (Task 8). A flow (booking, then payment) lives
+    in one group of the input format, so it stays in one module, written by one call. Groups in order of first
+    appearance, the home page's group first; a page without reqs follows the page before it; a group over
+    MAX_PAGES_PER_MODULE is split in list order; a module of 1 or 2 pages joins the module before it when the total
+    stays within the limit. Ids m1, m2, ... Writes plan["modules"] and every page["module"]."""
+    if not isinstance(plan.get("pages"), list):
         return
-    modules = {m["id"]: m for m in _dicts(plan["modules"]) if isinstance(m.get("id"), str) and isinstance(m.get("pages"), list)}
-    for page in _dicts(plan["pages"]):
-        pid = page.get("id")
-        owners = [mid for mid, m in modules.items() if pid in m["pages"]]
-        if not owners and page.get("module") in modules:
-            modules[page["module"]]["pages"].append(pid)
-    taken = {m.get("id") for m in _dicts(plan["modules"])}
-    settled = []
-    for module in plan["modules"]:
-        settled.append(module)
-        if not (isinstance(module, dict) and module.get("id") in modules):
-            continue
-        listed, size, n = module["pages"], config.MAX_PAGES_PER_MODULE, 1
-        module["pages"] = listed[:size]
-        for start in range(size, len(listed), size):
-            while f"{module['id']}_{n}" in taken or n == 1:
-                n += 1
-            taken.add(f"{module['id']}_{n}")
-            settled.append({"id": f"{module['id']}_{n}", "pages": listed[start:start + size]})
-    plan["modules"] = settled
-    owner = {}
-    for module in _dicts(settled):
-        for pid in module.get("pages", []) if isinstance(module.get("pages"), list) else []:
-            owner.setdefault(pid, []).append(module.get("id"))
-    for page in _dicts(plan["pages"]):
-        if len(owner.get(page.get("id"), [])) == 1:
-            page["module"] = owner[page["id"]][0]
+    pages = [p for p in _dicts(plan["pages"]) if isinstance(p.get("id"), str)]
+    if not pages:
+        plan["modules"] = []
+        return
+    home = next((p for p in pages if p.get("route") == "/"), pages[0])
+    groups: dict[str | None, list[str]] = {}
+    previous = _page_group(home)
+    for page in pages:
+        group = _page_group(page)
+        group = previous if group is None else group
+        previous = group
+        groups.setdefault(group, [])
+    home_group = _page_group(home) if _page_group(home) is not None else next(iter(groups))
+    order = [home_group] + [g for g in groups if g != home_group]
+    previous = _page_group(home)
+    members: dict[str | None, list[str]] = {g: [] for g in order}
+    for page in pages:
+        group = _page_group(page)
+        group = previous if group is None else group
+        previous = group
+        members[group].append(page["id"])
+    size = config.MAX_PAGES_PER_MODULE
+    chunks = [members[g][i:i + size] for g in order for i in range(0, len(members[g]), size) if members[g]]
+    merged: list[list[str]] = []
+    for chunk in chunks:
+        if merged and len(chunk) <= 2 and len(merged[-1]) + len(chunk) <= size:
+            merged[-1].extend(chunk)
+        else:
+            merged.append(list(chunk))
+    plan["modules"] = [{"id": f"m{n}", "pages": chunk} for n, chunk in enumerate(merged, 1)]
+    owner = {pid: f"m{n}" for n, chunk in enumerate(merged, 1) for pid in chunk}
+    for page in pages:
+        page["module"] = owner[page["id"]]
 
 
 def settle_areas(plan: dict) -> list[str]:

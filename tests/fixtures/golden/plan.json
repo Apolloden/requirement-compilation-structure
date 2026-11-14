@@ -11,16 +11,16 @@
  ],
  "layout": {"controls": [{"role": "link", "name": "Notes", "to": "/notes", "when": "always"}]},
  "pages": [
-  {"id": "home", "route": "/", "title": "Notes", "layout": true, "module": "main", "reqs": ["REQ-1.1"], "controls": [], "shows": ["a short welcome text"], "flows": []},
-  {"id": "notes", "route": "/notes", "title": "Notes", "layout": true, "module": "main", "reqs": ["REQ-1.1", "REQ-1.2", "REQ-1.3"],
+  {"id": "home", "route": "/", "title": "Notes", "layout": true, "module": "m1", "reqs": ["REQ-1.1"], "controls": [], "shows": ["a short welcome text"], "flows": []},
+  {"id": "notes", "route": "/notes", "title": "Notes", "layout": true, "module": "m1", "reqs": ["REQ-1.1", "REQ-1.2", "REQ-1.3"],
    "controls": [{"role": "region", "name": "Note list", "when": "always"}, {"role": "link", "name": "Create Note", "when": "always"}],
    "shows": ["each note once, as a link named by its title, inside Note list"], "flows": []},
-  {"id": "note_new", "route": "/notes/new", "title": "Create Note", "layout": true, "module": "main", "reqs": ["REQ-1.2"],
+  {"id": "note_new", "route": "/notes/new", "title": "Create Note", "layout": true, "module": "m1", "reqs": ["REQ-1.2"],
    "controls": [{"role": "textbox", "name": "Title", "when": "always"}, {"role": "textbox", "name": "Body", "when": "always"}, {"role": "button", "name": "Save Note", "when": "always"}, {"role": "button", "name": "Cancel", "when": "always"}],
    "shows": [], "flows": ["Save Note: POST /api/notes, then open /notes/:id", "Cancel: open /notes without saving"]},
-  {"id": "note", "route": "/notes/:id", "title": "Note", "layout": true, "module": "main", "reqs": ["REQ-1.2", "REQ-1.3"],
+  {"id": "note", "route": "/notes/:id", "title": "Note", "layout": true, "module": "m1", "reqs": ["REQ-1.2", "REQ-1.3"],
    "controls": [{"role": "button", "name": "Delete", "when": "always"}, {"role": "button", "name": "Confirm Delete", "when": "after Delete"}, {"role": "button", "name": "Cancel", "when": "after Delete"}],
    "shows": ["the note title as an h1", "the note body"], "flows": ["Confirm Delete: DELETE /api/notes/:id, then open /notes"]}
  ],
- "modules": [{"id": "main", "pages": ["home", "notes", "note_new", "note"]}]
+ "modules": [{"id": "m1", "pages": ["home", "notes", "note_new", "note"]}]
 }

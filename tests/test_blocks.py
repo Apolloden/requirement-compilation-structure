@@ -30,7 +30,7 @@ class BlockTests(unittest.TestCase):
     def test_an_edit_block_without_end_is_closed_by_the_next_header(self):
         # v4 graded runs: 12306 a1.1 wrote 0 END lines in 259 blocks and Stack Overflow a1.2 3 in 191; both rounds were
         # dropped whole (docs/6-arclaser/evidence.md 2.5).
-        other = "frontend/src/pages/main.jsx"
+        other = "frontend/src/pages/m1.jsx"
         text = edit_block(APP, ("a\n", "A\n")).replace("=== END EDIT ===\n", "") + edit_block(other, ("b\n", "B\n"))
         self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n"), Edit(other, "b\n", "B\n")])
 
@@ -62,7 +62,7 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n"), Edit(APP, "d\n", "D\n")])
 
     def test_only_generated_paths_are_allowed(self):
-        for p in ["backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/main.jsx", "tests/scenarios-2.spec.ts"]:
+        for p in ["backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/m1.jsx", "tests/scenarios-2.spec.ts"]:
             self.assertTrue(is_allowed_path(p), p)
         for p in ["../x.js", "/etc/passwd", "backend/server.js", "frontend/src/api.js", "frontend/src/pages/Main.jsx", "tests/helpers.ts", "deploy.sh"]:
             self.assertFalse(is_allowed_path(p), p)
