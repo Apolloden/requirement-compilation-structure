@@ -1,4 +1,8 @@
-# ArcFlash results
+# ArcFlash and ArcLaser results
+
+## ArcLaser (branch `arclaser`, 2026-11-14): built, not yet run on real requirements
+
+No paid run yet. Free checks only (replays of the recorded v4 runs, unit suite 270 green): repair answers keep 86% of the real changes with 34% of the text; no plan-fix calls; 12306's booking and payment pages share a module; the static checks catch v4's two flow-blocking faults (Stack Overflow's "Ask Question" outside its region, 12306's menu links as text). Change log: `docs/6-arclaser/arclaser-changes.md` in the course project folder.
 
 ## Best so far: ArcFlash v4
 
