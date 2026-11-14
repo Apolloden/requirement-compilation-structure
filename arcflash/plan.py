@@ -269,9 +269,10 @@ def settle_areas(plan: dict) -> list[str]:
     owners = [("layout", layout_controls, set())] + [(f"page {p.get('id')}", _dicts(p.get("controls", [])), None)
                                                      for p in _dicts(plan.get("pages", []))]
     for where, controls, _ in owners:
-        names = layout_names | {c.get("name") for c in controls}
         for c in controls:
-            if "in" in c and (not isinstance(c["in"], str) or c["in"] not in names or c["in"] == c.get("name")):
+            # the area is another control of the page or the layout; it may share the control's name ("Sign in")
+            areas = {x.get("name") for x in layout_controls + controls if x is not c}
+            if "in" in c and (not isinstance(c["in"], str) or c["in"] not in areas):
                 notes.append(f'{where}: {c.get("role")} "{c.get("name")}" was placed in "{c["in"]}", which is no area of '
                              'that page or the layout')
                 del c["in"]

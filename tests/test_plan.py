@@ -347,6 +347,20 @@ class PlanTests(unittest.TestCase):
         with _mock.patch("arcflash.plan.settle_plan", side_effect=KeyError("boom")):
             with self.assertRaises(PlanError): make_plan(load_spec(NOTES), "", llm, temperature=0.2)
 
+    def test_an_area_may_share_its_name_with_the_control_inside_it(self):
+        # Held-out lane (2026-11-14): region "Sign in" holds button "Sign in"; the "in" was dropped as if the button
+        # named itself. Only the control itself is not its own area.
+        plan = golden_plan()
+        controls = next(p for p in plan["pages"] if p["id"] == "note_new")["controls"]
+        controls.append({"role": "region", "name": "Save Note", "when": "always"})
+        next(c for c in controls if c["name"] == "Save Note" and c["role"] == "button")["in"] = "Save Note"
+        lonely = {"role": "button", "name": "Alone", "when": "always", "in": "Alone"}
+        controls.append(lonely)
+        notes = settle_areas(plan)
+        self.assertEqual(next(c for c in controls if c["name"] == "Save Note" and c["role"] == "button")["in"], "Save Note")
+        self.assertNotIn("in", lonely)
+        self.assertEqual(notes, ['page note_new: button "Alone" was placed in "Alone", which is no area of that page or the layout'])
+
     def test_page_component(self):
         self.assertEqual((page_component("item_detail"), page_component("home")), ("PageItemDetail", "PageHome"))
 
