@@ -24,7 +24,9 @@ def is_allowed_path(path: str) -> bool:
 
 
 def _blocks(text: str) -> list[tuple[str, str, list[str]]]:
-    """Complete blocks as (kind, path, lines), in answer order. A block without its end line is dropped."""
+    """Blocks as (kind, path, lines), in answer order. A FILE block without its end line is dropped (half a file is worse
+    than none); an EDIT block without it is closed by the next header or the end of the text, and the pair parser keeps
+    only its complete SEARCH/REPLACE pairs (v4: two repair rounds lost every edit to missing END lines)."""
     found, current = [], None
     for line in text.splitlines():
         if current is not None and END[current[0]].match(line):
@@ -33,9 +35,13 @@ def _blocks(text: str) -> list[tuple[str, str, list[str]]]:
             continue
         header = HEADER.match(line)
         if header and not line.startswith("=== END "):
-            current = (header.group(1), header.group(2).strip().strip("`").strip(), [])  # an open block is dropped
+            if current is not None and current[0] == "EDIT":
+                found.append(current)
+            current = (header.group(1), header.group(2).strip().strip("`").strip(), [])
         elif current is not None:
             current[2].append(line)
+    if current is not None and current[0] == "EDIT":
+        found.append(current)
     return found
 
 

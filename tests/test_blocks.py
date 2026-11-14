@@ -26,6 +26,22 @@ class BlockTests(unittest.TestCase):
         text = "=== FILE: backend/app.js ===\na\n=== FILE: frontend/src/App.jsx ===\nb\n\n\n=== END FILE ===\n"
         self.assertEqual(parse_file_blocks(text), {"frontend/src/App.jsx": "b\n"})
 
+    def test_an_edit_block_without_end_is_closed_by_the_next_header(self):
+        # v4 graded runs: 12306 a1.1 wrote 0 END lines in 259 blocks and Stack Overflow a1.2 3 in 191; both rounds were
+        # dropped whole (docs/6-arclaser/evidence.md 2.5).
+        other = "frontend/src/pages/main.jsx"
+        text = edit_block(APP, ("a\n", "A\n")).replace("=== END EDIT ===\n", "") + edit_block(other, ("b\n", "B\n"))
+        self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n"), Edit(other, "b\n", "B\n")])
+
+    def test_an_edit_block_without_end_at_the_end_of_the_answer_keeps_its_complete_pairs(self):
+        text = f"=== EDIT: {APP} ===\n<<<<<<< SEARCH\na\n=======\nA\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nb\n=======\nB"
+        self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n")])
+
+    def test_a_file_block_without_end_is_still_dropped(self):
+        text = "=== FILE: backend/app.js ===\nhalf\n" + edit_block(APP, ("a\n", "A\n"))
+        self.assertEqual(parse_edits(text), [Edit(APP, "a\n", "A\n")])
+        self.assertEqual(parse_file_blocks("=== FILE: backend/app.js ===\nhalf"), {})
+
     def test_only_generated_paths_are_allowed(self):
         for p in ["backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/main.jsx", "tests/scenarios-2.spec.ts"]:
             self.assertTrue(is_allowed_path(p), p)
