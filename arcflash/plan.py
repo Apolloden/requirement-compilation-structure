@@ -194,6 +194,21 @@ def _parse(text: str) -> dict:
     return data
 
 
+def settle_modules(plan: dict) -> None:
+    """Make each page's "module" agree with the module lists, in place: the list wins (code generation reads the
+    lists); a page that no list has joins the module it names. Saves a full plan-fix call (v4 plan R6)."""
+    if not isinstance(plan.get("pages"), list) or not isinstance(plan.get("modules"), list):
+        return
+    modules = {m["id"]: m for m in _dicts(plan["modules"]) if isinstance(m.get("id"), str) and isinstance(m.get("pages"), list)}
+    for page in _dicts(plan["pages"]):
+        pid = page.get("id")
+        owners = [mid for mid, m in modules.items() if pid in m["pages"]]
+        if len(owners) == 1:
+            page["module"] = owners[0]
+        elif not owners and page.get("module") in modules:
+            modules[page["module"]]["pages"].append(pid)
+
+
 def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[dict, list[str]]:
     """Up to 3 attempts; the first plan without problems wins, else the last plan that parsed, with its problems."""
     system = load_prompt("rules")
@@ -217,6 +232,7 @@ def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[
         except ValueError as e:
             problems = [f"the answer is not one valid JSON object: {e}"]
             continue
+        settle_modules(plan)
         problems = validate_plan(plan, spec, notes_text)
         best, best_problems = plan, problems
         if not problems:

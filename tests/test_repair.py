@@ -34,7 +34,7 @@ def edit(path, search, replace):
 
 class Budget:
     def __init__(self, ok): self.ok = ok
-    def allows(self, kind): return self.ok
+    def allows(self, kind): return self.ok if isinstance(self.ok, bool) else kind in self.ok
 
 
 class RepairTests(unittest.TestCase):
@@ -100,6 +100,14 @@ class RepairTests(unittest.TestCase):
     def test_budget_stops_repairs(self):
         llm = FakeLLM({})
         self.run_loop(llm, [], budget=False); self.assertEqual(llm.calls, [])
+
+    def test_past_the_time_limit_only_an_app_that_does_not_start_is_repaired(self):
+        # v3: every site reached its first check after the time limit, so no round ran; Ctrip shipped the template
+        # because one missing export broke the build (docs/5-arcflash-v4/plan.md R2).
+        llm = FakeLLM({"repair:": ["no edits"] * 2})
+        self.run_loop(llm, [], budget={"rescue"}); self.assertEqual(llm.calls, [])
+        self.run_loop(llm, [], budget={"rescue"}, first=report(0, built=False, booted=False))
+        self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2"])
 
     def test_an_answer_without_edits_is_a_round_without_gain(self):
         llm = FakeLLM({"repair:": ["I cannot help.", "Still nothing."]})

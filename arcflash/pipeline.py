@@ -37,13 +37,15 @@ def default_tools() -> Tools:
 
 
 class Budget:
-    """Time and estimated billed cost; repairs and the restart each keep a reserve."""
+    """Time and estimated billed cost. Repairs stop at MAX_RUN_SECONDS, except a rescue round for an app that does not
+    start (it would score 0); a restart needs as much time as the first attempt took."""
 
     def __init__(self, usage: Usage, scenarios: int, *, clock=time.monotonic) -> None:
         self.usage = usage
         self.clock = clock
         self.started = clock()
         self.cap_cny = max(config.MIN_RUN_COST_CNY, config.COST_PER_SCENARIO_CNY * scenarios)
+        self.attempt_seconds = 0.0   # how long the last attempt took, from its plan to its last check
 
     def elapsed(self) -> float:
         return self.clock() - self.started
@@ -51,11 +53,16 @@ class Budget:
     def _billed(self) -> float:
         return self.usage.totals()["billed_cny"]
 
+    def _attempt_reserve(self) -> float:
+        return max(config.ATTEMPT_RESERVE_SECONDS, self.attempt_seconds)
+
     def allows(self, kind: str) -> bool:
         if kind == "repair":
             return self.elapsed() + config.REPAIR_RESERVE_SECONDS <= config.MAX_RUN_SECONDS and self._billed() < self.cap_cny
+        if kind == "rescue":
+            return self.elapsed() <= config.RESCUE_UNTIL_SECONDS and self._billed() < self.cap_cny
         if kind == "attempt":
-            return (self.elapsed() + config.ATTEMPT_RESERVE_SECONDS <= config.MAX_RUN_SECONDS
+            return (self.elapsed() + self._attempt_reserve() <= config.MAX_RUN_SECONDS
                     and self._billed() < self.cap_cny * config.RESTART_COST_SHARE)
         raise ValueError(f"unknown budget kind {kind!r}")
 
@@ -66,8 +73,8 @@ class Budget:
             return f"time: {used}"
         if billed >= self.cap_cny:
             return f"cost: estimated ¥{billed:.2f} reached the cap of ¥{self.cap_cny:.2f}"
-        if self.elapsed() + config.ATTEMPT_RESERVE_SECONDS > config.MAX_RUN_SECONDS:
-            return f"time: {used}; too little left for a restart"
+        if self.elapsed() + self._attempt_reserve() > config.MAX_RUN_SECONDS:
+            return f"time: {used}; too little left for a restart ({self._attempt_reserve() / 60:.0f} min)"
         if billed >= self.cap_cny * config.RESTART_COST_SHARE:
             return f"cost: estimated ¥{billed:.2f}; a restart needs less than ¥{self.cap_cny * config.RESTART_COST_SHARE:.2f}"
         return None
@@ -206,6 +213,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             attempt = {"attempt": n, "plan_problems": [], "generation_problems": [], "error": None, "rounds": []}
             result["attempts"].append(attempt)
             temperature = config.TEMPERATURE if n == 1 else config.RESTART_TEMPERATURE
+            attempt_started = clock()
             try:
                 _say(f"attempt {n}: plan")
                 plan, attempt["plan_problems"] = make_plan(spec, notes_text, llm, temperature=temperature)
@@ -235,6 +243,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             first = tools.check(ws, plan, harness_ok)
             context = build_context(spec, notes_text, plan)
             best, snapshot = repair_loop(ws, context, plan, llm, first, lambda: tools.check(ws, plan, harness_ok), budget, f"a{n}")
+            budget.attempt_seconds = clock() - attempt_started
             attempt["rounds"] = _rounds(ws, f"a{n}")
             versions.append((best, snapshot))
             _say(f"attempt {n}: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")

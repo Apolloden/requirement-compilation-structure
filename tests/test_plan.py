@@ -151,6 +151,21 @@ class PlanTests(unittest.TestCase):
         self.assertEqual((llm.calls[0]["method"], llm.calls[0]["max_tokens"], llm.calls[0]["temperature"]),
                          ("complete_long", config.MAX_TOKENS["plan"], 0.2))
 
+    def test_module_membership_is_settled_by_code(self):
+        # v3 Ctrip: 21 pages said "module": "main" while the module list put them elsewhere (plan.md R6).
+        def moved(p):
+            p["modules"][0]["pages"].remove("note")
+            p["modules"].append({"id": "more", "pages": ["note"]})   # the list says "more", the page still says "main"
+        def unlisted(p):
+            p["modules"][0]["pages"].remove("note")                    # in no list; the page names "main"
+        for name, change, module, listed in (("list wins", moved, "more", ["note"]), ("joins its module", unlisted, "main", None)):
+            with self.subTest(name):
+                llm = FakeLLM({"plan": [json.dumps(mutated(change))]})
+                plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
+                self.assertEqual((problems, len(llm.calls)), ([], 1))
+                self.assertEqual(page(plan, "note")["module"], module)
+                self.assertIn("note", next(m for m in plan["modules"] if m["id"] == module)["pages"])
+
     def test_problems_are_sent_back(self):
         plan_without_req_1_3 = mutated(without_req_1_3)
         llm = FakeLLM({"plan-fix": [json.dumps(golden_plan())], "plan": [json.dumps(plan_without_req_1_3)]})

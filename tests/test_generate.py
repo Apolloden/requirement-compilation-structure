@@ -122,6 +122,16 @@ class GenerateTests(unittest.TestCase):
         llm = answers(backend=[LLMError("busy")])
         with self.assertRaises(GenerationError): generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
 
+    def test_a_complete_second_answer_replaces_the_first(self):
+        # v3 Ctrip: main.jsx from the second answer imported isValidId from the second answer's shared.jsx, but the first
+        # answer's shared.jsx was kept, so the build failed (docs/5-arcflash-v4/plan.md R4).
+        second_shared = golden_files()["frontend/src/shared.jsx"] + "\nexport function isValidId(id) { return !!id; }\n"
+        llm = answers(**{"frontend:main-again": [pick("frontend/src/App.jsx", "frontend/src/pages/main.jsx",
+                                                      **{"frontend/src/shared.jsx": second_shared})],
+                         "frontend:main": [pick(*SHELL)]})
+        files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
+        self.assertEqual(files["frontend/src/shared.jsx"], second_shared); self.assertEqual(problems, [])
+
     def test_tests_chunk_by_twenty_and_see_only_the_digest(self):
         tmp = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, tmp, True)
         data = yaml.safe_load((NOTES / "requirements.yaml").read_text())
@@ -143,6 +153,7 @@ class GenerateTests(unittest.TestCase):
         self.assertEqual((set(files), problems), ({"tests/scenarios-1.spec.ts", "tests/scenarios-2.spec.ts", "tests/scenarios-3.spec.ts"}, []))
         self.assertTrue(call(llm, "tests:1")["user"].startswith(build_context(spec) + "\n\n"))
         self.assertEqual(call(llm, "tests:1")["max_tokens"], config.MAX_TOKENS["tests"])
+        self.assertTrue(all(c["background"] for c in llm.calls))   # the test writer never takes a plan or code slot
 
     def test_unwritten_tests_are_a_problem(self):
         llm = FakeLLM({"tests:1": ["nothing", LLMError("busy")]})

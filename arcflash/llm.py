@@ -125,6 +125,7 @@ class LLM:
         self._dropped: set[str] = set()
         self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(config.MAX_PARALLEL_CALLS)
+        self._background_slots = threading.BoundedSemaphore(config.MAX_BACKGROUND_CALLS)
         self._count = 0
 
     # ---- public calls -------------------------------------------------------------------------
@@ -134,18 +135,21 @@ class LLM:
         return self._request(purpose, _messages(system, user), max_tokens, json_mode, temperature)
 
     def complete_long(self, purpose: str, system: str | None, user: str, *, max_tokens: int,
-                      json_mode: bool = False, temperature: float = config.TEMPERATURE) -> Completion:
+                      json_mode: bool = False, temperature: float = config.TEMPERATURE, background: bool = False) -> Completion:
+        """`background` calls (the test writer) wait for their own slots, never for those of the critical path."""
         messages = _messages(system, user)
-        result = self._request(purpose, messages, max_tokens, json_mode, temperature)
+        result = self._request(purpose, messages, max_tokens, json_mode, temperature, background=background)
         if result.finish_reason == "runaway":
             messages = _messages(system, user + "\n\n" + config.RUNAWAY_PROMPT)
-            result = self._add(result, self._request(f"{purpose}+retry", messages, max_tokens, json_mode, temperature), replace=True)
+            result = self._add(result, self._request(f"{purpose}+retry", messages, max_tokens, json_mode, temperature,
+                                                     background=background), replace=True)
         n = 0
-        while result.finish_reason == "length" and n < config.MAX_CONTINUATIONS:
+        # "cut": the connection closed mid-answer (no finish reason, no usage); the text so far is kept and continued.
+        while result.finish_reason in ("length", "cut") and n < config.MAX_CONTINUATIONS:
             n += 1
             more = messages + [{"role": "assistant", "content": result.text}, {"role": "user", "content": config.CONTINUE_PROMPT}]
             # A continuation is a fragment, never a JSON object of its own, so JSON mode stays off for it.
-            part = self._request(f"{purpose}+{n}", more, max_tokens, False, temperature)
+            part = self._request(f"{purpose}+{n}", more, max_tokens, False, temperature, background=background)
             part.text = strip_overlap(result.text, part.text)
             result = self._add(result, part)
         return result
@@ -190,12 +194,13 @@ class LLM:
                     return name
         return None
 
-    def _request(self, purpose, messages, max_tokens, json_mode, temperature, image_note="") -> Completion:
+    def _request(self, purpose, messages, max_tokens, json_mode, temperature, image_note="", background=False) -> Completion:
         waits = list(config.RETRY_WAITS)
+        slots = self._background_slots if background else self._slots
         while True:
             kwargs = self._kwargs(messages, max_tokens, json_mode, temperature)
             try:
-                with self._slots:
+                with slots:
                     completion = self._stream(kwargs)
                 break
             except openai.APIStatusError as e:
@@ -244,6 +249,10 @@ class LLM:
                     close()
                 except Exception:
                     pass
+        if finish is None and usage is None:   # the connection closed before the answer ended
+            if not text:
+                raise _StreamError("the stream ended without an answer")
+            finish = "cut"
         return Completion(text=text, finish_reason=finish or "stop", seconds=time.monotonic() - started, **_usage_numbers(usage))
 
     def _log(self, purpose, messages, completion: Completion, image_note: str) -> None:

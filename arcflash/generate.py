@@ -48,16 +48,21 @@ def stub_module(module_id: str, components: list[str]) -> str:
     return f"// Module \"{module_id}\" was not generated; these stubs keep the build working.\n{body}"
 
 
-def _ask(llm, purpose: str, system: str, user: str, expected: list[str], kind: str, temperature: float) -> dict[str, str]:
-    """One call; the expected file blocks that are missing are asked for once more."""
-    answer = llm.complete_long(purpose, system, user, max_tokens=config.MAX_TOKENS[kind], temperature=temperature)
+def _ask(llm, purpose: str, system: str, user: str, expected: list[str], kind: str, temperature: float,
+         background: bool = False) -> dict[str, str]:
+    """One call; the expected file blocks that are missing are asked for once more. When that second answer has every
+    expected file, it is used whole: its files were written together and fit each other (v4 plan R4)."""
+    answer = llm.complete_long(purpose, system, user, max_tokens=config.MAX_TOKENS[kind], temperature=temperature,
+                               background=background)
     files = {k: v for k, v in parse_file_blocks(answer.text).items() if k in expected}
     missing = [k for k in expected if k not in files]
     if missing:
         again = llm.complete_long(f"{purpose}-again", system,
                                   user + "\n\n" + fill(load_prompt("missing_files"), paths=", ".join(missing)),
-                                  max_tokens=config.MAX_TOKENS[kind], temperature=temperature)
-        more = parse_file_blocks(again.text)
+                                  max_tokens=config.MAX_TOKENS[kind], temperature=temperature, background=background)
+        more = {k: v for k, v in parse_file_blocks(again.text).items() if k in expected}
+        if len(more) == len(expected):
+            return more
         files.update({k: more[k] for k in missing if k in more})
     return files
 
@@ -128,7 +133,7 @@ def write_tests(spec: Spec, llm) -> tuple[dict[str, str], list[str]]:
         task = fill(load_prompt("tests"), scenario_ids=", ".join(chunk), n=str(n))
         try:
             return _ask(llm, f"tests:{n}", system, context + "\n\n" + task, [f"tests/scenarios-{n}.spec.ts"], "tests",
-                        config.TEMPERATURE)
+                        config.TEMPERATURE, background=True)
         except LLMError:
             return {}
 

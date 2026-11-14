@@ -71,12 +71,15 @@ def _apply(llm, purpose: str, system: str, context: str, files: dict[str, str], 
 
 def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport,
                 check: Callable[[], CheckReport], budget, label: str) -> tuple[CheckReport, Path]:
-    """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone. Returns the best report and snapshot."""
+    """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone. Returns the best report and snapshot.
+    A booted app needs budget kind "repair"; one that does not start needs only "rescue"."""
     system = load_prompt("rules")
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
     note, without_gain = "", 0
     for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
-        if best.all_green() or without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN or not budget.allows("repair"):
+        # past the time limit only an app that does not start is still repaired: it would score 0 (v4 plan R2)
+        kind = "repair" if best.booted else "rescue"
+        if best.all_green() or without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN or not budget.allows(kind):
             break
         files = ws.read_generated()
         purpose = f"repair:{label}.{n}"

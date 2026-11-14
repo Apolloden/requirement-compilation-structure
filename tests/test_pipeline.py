@@ -136,13 +136,31 @@ class PipelineTests(unittest.TestCase):
         now = [0.0]
         usage = Usage()
         b = Budget(usage, 12, clock=lambda: now[0])
-        self.assertTrue(b.allows("repair") and b.allows("attempt")); self.assertIsNone(b.stop_reason())
+        self.assertTrue(b.allows("repair") and b.allows("rescue") and b.allows("attempt")); self.assertIsNone(b.stop_reason())
         now[0] = config.MAX_RUN_SECONDS - config.ATTEMPT_RESERVE_SECONDS + 1
         self.assertTrue(b.allows("repair")); self.assertFalse(b.allows("attempt")); self.assertIn("time", b.stop_reason())
+        now[0] = config.MAX_RUN_SECONDS + 60          # past the limit: only an app that does not start is still repaired
+        self.assertFalse(b.allows("repair")); self.assertTrue(b.allows("rescue"))
+        now[0] = config.RESCUE_UNTIL_SECONDS + 1
+        self.assertFalse(b.allows("rescue"))
         now[0] = 0.0
         from arcflash.llm import Completion
         usage.add("x", Completion("", "stop", output_tokens=160_000))   # list ¥0.64, billed ¥1.28 ≥ 60% of ¥2
         self.assertTrue(b.allows("repair")); self.assertFalse(b.allows("attempt")); self.assertIn("cost", b.stop_reason())
+        usage.add("y", Completion("", "stop", output_tokens=200_000))
+        self.assertFalse(b.allows("rescue"))           # the cost cap holds for a rescue too
+
+    def test_a_restart_needs_as_long_as_the_first_attempt_took(self):
+        now = [0.0]
+        b = Budget(Usage(), 12, clock=lambda: now[0])
+        b.attempt_seconds = 70 * 60                    # v3 Ctrip: 74 min to the first check
+        now[0] = config.MAX_RUN_SECONDS - 70 * 60 - 1
+        self.assertTrue(b.allows("attempt"))
+        now[0] = config.MAX_RUN_SECONDS - 70 * 60 + 1
+        self.assertFalse(b.allows("attempt")); self.assertIn("restart", b.stop_reason())
+
+    def test_limits(self):
+        self.assertEqual((config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (120 * 60, 180 * 60))
 
     def test_good_enough(self):
         self.assertTrue(good_enough(report(passed=2))); self.assertFalse(good_enough(report(passed=1)))
@@ -155,6 +173,14 @@ class PipelineTests(unittest.TestCase):
         result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1)], on_check=jump), clock=lambda: now[0])
         self.assertEqual(len(result["attempts"]), 1); self.assertIn("time", result["stop_reason"])
         self.assertFalse([c for c in llm.calls if c["purpose"].startswith("repair")])
+
+    def test_rescue_after_the_time_limit_when_nothing_builds(self):
+        now = [0.0]
+        def jump(): now[0] = config.MAX_RUN_SECONDS + 60
+        llm = golden_llm(attempts=2)
+        result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[NOT_BUILT], on_check=jump), clock=lambda: now[0])
+        self.assertTrue([c for c in llm.calls if c["purpose"].startswith("repair")])
+        self.assertEqual(len(result["attempts"]), 1)
 
     def test_tests_and_notes_are_made_once(self):
         llm = golden_llm(attempts=2)

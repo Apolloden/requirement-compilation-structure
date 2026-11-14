@@ -33,6 +33,11 @@ def stream_chunks(text, *, finish="stop", usage=(100, 0, 10), pieces=3):
     return chunks
 
 
+def cut_chunks(text, *, pieces=3):
+    """A stream the connection closed mid-answer: content chunks only, no finish_reason and no usage chunk."""
+    return [c for c in stream_chunks(text, finish=None, pieces=pieces) if c.choices]
+
+
 def api_error(status: int, message: str) -> Exception:
     """A real openai.APIStatusError subclass, as the SDK raises it."""
     response = _http.Response(status, request=_REQUEST, json={"error": {"message": message}})
@@ -82,10 +87,11 @@ class FakeLLM:
         self.usage = Usage()
         self._lock = threading.Lock()
 
-    def _answer(self, method, purpose, system, user, max_tokens, json_mode=False, temperature=None):
+    def _answer(self, method, purpose, system, user, max_tokens, json_mode=False, temperature=None, background=False):
         with self._lock:
             self.calls.append({"method": method, "purpose": purpose, "system": system, "user": user,
-                               "max_tokens": max_tokens, "json_mode": json_mode, "temperature": temperature})
+                               "max_tokens": max_tokens, "json_mode": json_mode, "temperature": temperature,
+                               "background": background})
             keys = [k for k in self.script if purpose.startswith(k)]
             if not keys:
                 raise AssertionError(f"FakeLLM has no answers for purpose {purpose!r}")
@@ -102,8 +108,8 @@ class FakeLLM:
     def complete(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2):
         return self._answer("complete", purpose, system, user, max_tokens, json_mode, temperature)
 
-    def complete_long(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2):
-        return self._answer("complete_long", purpose, system, user, max_tokens, json_mode, temperature)
+    def complete_long(self, purpose, system, user, *, max_tokens, json_mode=False, temperature=0.2, background=False):
+        return self._answer("complete_long", purpose, system, user, max_tokens, json_mode, temperature, background)
 
     def describe_image(self, purpose, prompt, image, mime, *, max_tokens):
         return self._answer("describe_image", purpose, None, prompt, max_tokens)

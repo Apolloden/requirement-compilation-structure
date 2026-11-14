@@ -7,7 +7,7 @@ from unittest import mock
 
 from arcflash import config
 from arcflash.llm import LLM, Completion, LLMError, Usage, is_runaway, strip_overlap
-from tests.fakes import FakeClient, api_error, connection_error, stream_chunks
+from tests.fakes import FakeClient, api_error, connection_error, cut_chunks, stream_chunks
 
 
 class LLMTests(unittest.TestCase):
@@ -97,6 +97,39 @@ class LLMTests(unittest.TestCase):
         self.assertEqual(messages[-1], {"role": "user", "content": config.CONTINUE_PROMPT})
         self.assertEqual([r["purpose"] for r in llm.usage.records()], ["plan", "plan+1"])
         self.assertEqual(c.input_tokens, 200)
+
+    def test_answer_cut_by_the_connection_is_continued(self):
+        # v3 Ctrip: plan and frontend:main streams ended after 1,100 to 1,200 s with no finish reason and no usage;
+        # the half answer was used as if complete (docs/5-arcflash-v4/plan.md R3).
+        llm = self.make([cut_chunks("line one\nline two"), stream_chunks("\nline three")])
+        c = llm.complete_long("plan", "S", "U", max_tokens=10)
+        self.assertEqual((c.text, c.finish_reason), ("line one\nline two\nline three", "stop"))
+        self.assertEqual([r["purpose"] for r in llm.usage.records()], ["plan", "plan+1"])
+        self.assertEqual(llm.usage.records()[0]["finish"], "cut")
+
+    def test_a_cut_stream_without_text_is_retried(self):
+        c = self.make([cut_chunks(""), stream_chunks("ok")]).complete("x", None, "u", max_tokens=10)
+        self.assertEqual((c.text, self.sleeps), ("ok", [15]))
+
+    def test_usage_without_finish_reason_is_a_normal_end(self):
+        chunks = [c for c in stream_chunks("done", finish=None)]
+        c = self.make([chunks]).complete_long("x", None, "u", max_tokens=10)
+        self.assertEqual((c.text, c.finish_reason, len(self.client.requests)), ("done", "stop", 1))
+
+    def test_background_calls_use_their_own_two_slots(self):
+        client = FakeClient([stream_chunks("x") for _ in range(10)], delay=0.15)
+        llm = LLM(client=client, sleep=lambda s: None)
+        background = [threading.Thread(target=llm.complete_long, args=(f"t{i}", None, "u"),
+                                       kwargs={"max_tokens": 5, "background": True}) for i in range(6)]
+        for t in background: t.start()
+        for t in background: t.join()
+        self.assertEqual(client.max_in_flight, 2)
+        client.max_in_flight = 0
+        both = [threading.Thread(target=llm.complete_long, args=(f"t{i}", None, "u"),
+                                 kwargs={"max_tokens": 5, "background": i < 2}) for i in range(4)]
+        for t in both: t.start()
+        for t in both: t.join()
+        self.assertEqual(client.max_in_flight, 4)   # two background calls never hold a foreground slot
 
     def test_continuation_stops_after_two(self):
         c = self.make([stream_chunks(f"part{i} ", finish="length") for i in range(3)]).complete_long("x", None, "u", max_tokens=10)
