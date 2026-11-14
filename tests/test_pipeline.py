@@ -92,6 +92,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(json.loads((self.out / ".arc/notes.json").read_text()), {"reference/notes.png": "Layout: a list of notes."})
         self.assertEqual((self.out / ".arc/harness/tests/scenarios-1.spec.ts").read_text(), golden_files()[TESTS])
         self.assertIn("shipped a1-r0", self.printed.getvalue())
+        self.assertEqual(saved["agent"], "arclaser"); self.assertIn("[arclaser] shipped a1-r0", self.printed.getvalue())
 
     def test_restart_when_the_first_attempt_does_not_start(self):
         llm = golden_llm(attempts=2)

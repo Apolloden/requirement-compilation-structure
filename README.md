@@ -1,12 +1,12 @@
-# ArcFlash
+# ArcLaser
 
-ArcFlash turns a requirements folder (`requirements.yaml` plus screenshots) into a React + Express + SQLite web app.
+ArcLaser (the generation after ArcFlash; the Python package keeps the name `arcflash`) turns a requirements folder (`requirements.yaml` plus screenshots) into a React + Express + SQLite web app.
 It makes one plan call, then writes the backend and the frontend in parallel from that plan.
 It checks the whole app locally (static checks, build, start, a page check and Playwright scenario tests written from the requirement text only).
 It repairs the app with SEARCH/REPLACE edits in at most 3 rounds, keeps the best version, and restarts once from a new plan if the result is poor.
 Every call uses `deepseek-flash` with thinking off; the endpoint and key come only from `OPENAI_BASE_URL` and `OPENAI_API_KEY`.
 
-Results of the ARC-Bench run: `RESULTS.md`. Design and tasks: `../docs/3-arcflash/arcflash-plan.md`. Change log: `../docs/3-arcflash/arcflash-changes.md`. These two documents are kept in the course workspace next to this folder, not in this repository.
+Results of the ARC-Bench run: `RESULTS.md`. ArcLaser plan: `../docs/6-arclaser/arclaser-plan.md`, change log: `../docs/6-arclaser/arclaser-changes.md`. ArcFlash design: `../docs/3-arcflash/arcflash-plan.md`, change log: `../docs/3-arcflash/arcflash-changes.md`. These documents are kept in the course workspace next to this folder, not in this repository.
 
 **A full run costs money. Ask first.**
 
@@ -18,7 +18,7 @@ Results of the ARC-Bench run: `RESULTS.md`. Design and tasks: `../docs/3-arcflas
 - Grade a finished app with a test folder: `.venv/bin/python scripts/grade_local.py <out> <tests-dir> [--port 3311] [--keep]`
 - Unit tests (no model, no npm): `.venv/bin/python -m unittest discover -s tests -v`
 - Integration tests (no model; real npm and Chromium): `ARCFLASH_INTEGRATION=1 .venv/bin/python -m unittest discover -s tests -v`
-- Package for ARC-Bench: `python3 scripts/package.py [-o PATH]` (writes `../arcflash-<date>.zip` with only `main.py`, `requirements.txt` and `arcflash/`)
+- Package for ARC-Bench: `python3 scripts/package.py [-o PATH]` (writes `../arclaser-<date>.zip` with only `main.py`, `requirements.txt` and `arcflash/`)
 
 ## What a run leaves in `<out>`
 

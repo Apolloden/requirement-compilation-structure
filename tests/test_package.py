@@ -43,6 +43,9 @@ class PackageTests(unittest.TestCase):
         self.assertFalse(any(part.startswith(".") for n in names for part in n.split("/")), names)
         self.assertIn("entries", self.result.stdout)
 
+    def test_default_zip_name_is_arclaser(self):
+        self.assertIn('f"arclaser-{date.today().isoformat()}.zip"', (AGENT_ROOT / "scripts" / "package.py").read_text(encoding="utf-8"))
+
     def test_deploy_sh_keeps_its_executable_bit(self):
         info = zipfile.ZipFile(self.zip_path).getinfo("arcflash/template/app/deploy.sh")
         self.assertTrue((info.external_attr >> 16) & 0o111)

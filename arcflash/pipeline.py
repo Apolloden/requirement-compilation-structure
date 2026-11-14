@@ -86,7 +86,7 @@ def good_enough(report: CheckReport) -> bool:
 
 
 def _say(text: str) -> None:
-    print(f"[arcflash] {text}", flush=True)
+    print(f"[arclaser] {text}", flush=True)
 
 
 def _safe_result(future, fallback):
@@ -117,7 +117,7 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
     req_dir, out_dir = Path(req_dir), Path(out_dir)
     started = clock()
     tools = tools or default_tools()
-    result = {"agent": "arcflash", "started_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": 0,
+    result = {"agent": "arclaser", "started_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": 0,
               "input": {"requirements": 0, "leaves": 0, "scenarios": 0, "images": 0, "assets": 0},
               "usage": Usage().totals(), "calls": [], "harness_ok": False, "test_problems": [], "attempts": [],
               "shipped": _shipped("template", None), "stop_reason": None, "errors": []}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Zip the ArcFlash agent for ARC-Bench: main.py, requirements.txt and arcflash/ only, file modes kept.
+"""Zip the ArcLaser agent (package arcflash) for ARC-Bench: main.py, requirements.txt and arcflash/ only, file modes kept.
 
-Usage: python3 scripts/package.py [-o PATH]   (default: ../arcflash-<YYYY-MM-DD>.zip, next to the agent folder)
+Usage: python3 scripts/package.py [-o PATH]   (default: ../arclaser-<YYYY-MM-DD>.zip, next to the agent folder)
 No .env, no tests, no outputs and no ZIP ever goes into the archive, and the archive is never written inside the agent folder.
 """
 import argparse
@@ -26,8 +26,8 @@ def agent_files(root: Path) -> list[tuple[Path, str]]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-o", "--output", type=Path, default=ROOT.parent / f"arcflash-{date.today().isoformat()}.zip",
-                        help="archive path (default: ../arcflash-<date>.zip)")
+    parser.add_argument("-o", "--output", type=Path, default=ROOT.parent / f"arclaser-{date.today().isoformat()}.zip",
+                        help="archive path (default: ../arclaser-<date>.zip)")
     args = parser.parse_args(argv)
     output = args.output.expanduser().resolve()
     if output == ROOT or ROOT in output.parents:
