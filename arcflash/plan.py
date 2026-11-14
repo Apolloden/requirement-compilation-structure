@@ -10,7 +10,6 @@ from arcflash.spec import Spec
 
 SNAKE = re.compile(r"[a-z][a-z0-9_]*")
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
-ATTEMPTS = 3
 # Interactive roles a grader looks up only when the requirements state them (evidence.md C2: unstated menuitems).
 STATED_ONLY_ROLES = frozenset({"menuitem", "menuitemcheckbox", "menuitemradio", "option", "tab", "switch", "treeitem"})
 
@@ -60,7 +59,7 @@ def _control_problems(where: str, controls: list[dict], spec: Spec, notes_text: 
         elif name == "":
             continue   # an element the text knows only by its role, such as an error with role=alert
         elif not name.strip() or (name not in spec.corpus and name not in notes_text):
-            problems.append(f'{where}: control name "{name}" is not in the requirements or screenshot notes; copy names exactly')
+            problems.append(f'{where}: control name "{name}" is not in the requirements; check the wording')
         if role in STATED_ONLY_ROLES and name.strip() and not _role_stated(spec, role, name):
             problems.append(f'{where}: {role} "{name}" has a role the requirements do not state; '
                             'an action they name without a role is a link or a button')
@@ -69,6 +68,19 @@ def _control_problems(where: str, controls: list[dict], spec: Spec, notes_text: 
 
 def _pairs(controls: list[dict]) -> list[tuple[str, str]]:
     return [(c.get("role"), c.get("name")) for c in controls]
+
+
+def _triples(controls: list[dict]) -> list[tuple]:
+    return [(c.get("role"), c.get("name"), str(c.get("when", ""))) for c in controls]
+
+
+RUNTIME = re.compile(r"\{|<[^<>]+>")
+
+
+def _runtime(name: str, spec: Spec) -> bool:
+    """A name filled in at runtime: a {template} always (the input format writes placeholders so), a <value> unless the
+    requirement text has it literally (Review Focus 4)."""
+    return "{" in name or (bool(RUNTIME.search(name)) and name not in spec.corpus)
 
 
 def validate_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
@@ -112,23 +124,23 @@ def validate_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
 
     # 5-7: roles, names and duplicates
     problems += _control_problems("layout", layout_controls, spec, notes_text)
+    # The same role and name with another "when" is allowed (a per-row action, a second state); only exact repeats count.
+    # A page control with a layout control's name is allowed too (a form's submit button); settle_plan notes it.
     layout_pairs = _pairs(layout_controls)
-    for pair in dict.fromkeys(p for p in layout_pairs if layout_pairs.count(p) > 1):
-        problems.append(f'layout: {pair[0]} "{pair[1]}" appears twice')
+    layout_triples = _triples(layout_controls)
+    for t in dict.fromkeys(t for t in layout_triples if layout_triples.count(t) > 1):
+        problems.append(f'layout: {t[0]} "{t[1]}" appears twice')
     for n, page in enumerate(pages, start=1):
         controls = _dicts(page.get("controls", []))
         problems += _control_problems(names_of[n], controls, spec, notes_text)
-        pairs = _pairs(controls)
-        for pair in dict.fromkeys(p for p in pairs if pairs.count(p) > 1):
-            problems.append(f'{names_of[n]}: {pair[0]} "{pair[1]}" appears twice')
-        if page.get("layout"):
-            for pair in dict.fromkeys(p for p in pairs if p in layout_pairs):
-                problems.append(f'{names_of[n]}: {pair[0]} "{pair[1]}" repeats a layout control; header controls belong only in layout')
+        triples = _triples(controls)
+        for t in dict.fromkeys(t for t in triples if triples.count(t) > 1):
+            problems.append(f'{names_of[n]}: {t[0]} "{t[1]}" appears twice')
 
-    # 8: every "Name"(role=x) of the text is planned
+    # 8: every "Name"(role=x) of the text is planned (runtime values such as "<created title>" excepted)
     planned = set(layout_pairs) | {pair for page in pages for pair in _pairs(_dicts(page.get("controls", [])))}
     problems += [f'the requirements name {role} "{name}", but no page or layout control has it'
-                 for role, name in spec.role_names if (role, name) not in planned]
+                 for role, name in spec.role_names if (role, name) not in planned and not RUNTIME.search(name)]
 
     # 9-10: api and accounts
     seen_api = set()
@@ -249,6 +261,119 @@ def settle_areas(plan: dict) -> list[str]:
     return notes
 
 
+def _ancestors(spec: Spec, req: str) -> list[str]:
+    chain, seen = [], set()
+    parent = spec.requirements[req].parent if req in spec.requirements else None
+    while parent and parent in spec.requirements and parent not in seen:
+        chain.append(parent); seen.add(parent)
+        parent = spec.requirements[parent].parent
+    return chain
+
+
+def _home(pages: list[dict]) -> dict | None:
+    return next((p for p in pages if p.get("route") == "/"), pages[0] if pages else None)
+
+
+def _group_page(pages: list[dict], spec: Spec, req: str, holders: list[dict] | None = None) -> dict | None:
+    """The page (among `holders`, default all) that holds most requirements of req's nearest group; ties go to the first."""
+    candidates = holders if holders is not None else pages
+    for group in _ancestors(spec, req):
+        counts = [sum(group in _ancestors(spec, r) for r in p.get("reqs", []) if isinstance(r, str)) for p in candidates]
+        if counts and max(counts) > 0:
+            return candidates[counts.index(max(counts))]
+    return candidates[0] if holders else _home(pages)
+
+
+def settle_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
+    """Repair the plan in place by code (Task 7; no plan-fix call) and return what code could not repair, as short notes
+    for the code calls. A plan whose shape is wrong returns only its shape problems (the caller asks once more)."""
+    shape = _shape_problems(plan)
+    if shape:
+        return shape
+    pages, layout_controls = _dicts(plan["pages"]), _dicts(plan["layout"]["controls"])
+    notes: list[str] = []
+
+    # ids, routes and modules that only need lowercase or a leading slash
+    for page in pages:
+        if isinstance(page.get("id"), str):
+            page["id"] = re.sub(r"[^a-z0-9_]+", "_", page["id"].strip().lower()).strip("_") or page["id"]
+        if isinstance(page.get("route"), str) and page["route"] and not page["route"].startswith("/"):
+            page["route"] = "/" + page["route"]
+
+    for where, controls, page in [("layout", layout_controls, None)] + [(f"page {p.get('id')}", _dicts(p.get("controls", [])), p) for p in pages]:
+        kept, seen = [], set()
+        for c in controls:
+            role, name = c.get("role"), str(c.get("name", ""))
+            # a name filled in at runtime is something the page shows, not a fixed control
+            if name and _runtime(name, spec):
+                if page is not None:
+                    page.setdefault("shows", []).append(f'{role} "{name}"')
+                continue
+            # an action named without a role is a link or a button (evidence C2)
+            if role in STATED_ONLY_ROLES and name.strip() and not _role_stated(spec, role, name):
+                c["role"] = role = "link" if c.get("to") else "button"
+            key = (role, name, str(c.get("when", "")))
+            if key in seen:   # an exact duplicate
+                continue
+            seen.add(key)
+            kept.append(c)
+        if page is None:
+            plan["layout"]["controls"] = kept
+            layout_controls = kept
+        else:
+            page["controls"] = kept
+
+    # a requirement on no page joins the page that holds most requirements of its group
+    covered = {r for p in pages for r in p.get("reqs", []) if isinstance(p.get("reqs"), list)}
+    for leaf in spec.leaves:
+        if leaf not in covered and pages:
+            target = _group_page(pages, spec, leaf)
+            if not isinstance(target.get("reqs"), list):
+                target["reqs"] = []
+            target["reqs"].append(leaf)
+
+    # a "Name"(role=x) that no page or layout plans goes to the page of the requirement that names it
+    planned = set(_pairs(layout_controls)) | {pair for p in pages for pair in _pairs(_dicts(p.get("controls", [])))}
+    for role, name in spec.role_names:
+        if (role, name) in planned or RUNTIME.search(name):
+            continue
+        marker = f'"{name}"(role={role})'
+        owner = next((r for r in spec.leaves if marker in spec.requirements[r].text), None) \
+            or next((r for r in spec.leaves if name in spec.requirements[r].text), None)
+        holders = [p for p in pages if owner in p.get("reqs", [])] if owner else []
+        target = _group_page(pages, spec, owner, holders) if holders else _home(pages)
+        if target is not None:
+            target.setdefault("controls", []).append({"role": role, "name": name, "when": "always"})
+            planned.add((role, name))
+
+    # api: upper-case methods, no exact repeats, a session route when there are accounts
+    apis, seen_api = [], set()
+    for api in _dicts(plan["api"]):
+        api["method"] = str(api.get("method", "")).upper()
+        key = (api["method"], api.get("path"))
+        if key not in seen_api:
+            seen_api.add(key); apis.append(api)
+    auth = plan.get("auth") if isinstance(plan.get("auth"), dict) else {}
+    if auth.get("accounts") is True and ("GET", "/api/session") not in seen_api:
+        apis.append({"method": "GET", "path": "/api/session", "request": {}, "response": '{"user": null}', "errors": [], "reqs": []})
+    plan["api"] = apis
+
+    settle_modules(plan)
+    notes += settle_areas(plan)
+
+    # a page control with a layout control's name: fine when the requirement scopes it, else the layout's one hides
+    layout_pairs = set(_pairs(_dicts(plan["layout"]["controls"])))
+    for page in pages:
+        if page.get("layout"):
+            for role, name in dict.fromkeys(_pairs(_dicts(page.get("controls", [])))):
+                if (role, name) in layout_pairs and name:
+                    notes.append(f'page {page.get("id")} shows {role} "{name}" like the layout; unless the requirement acts on '
+                                 f'it inside a named form or region, hide the layout\'s "{name}" on route {page.get("route")}')
+
+    notes += validate_plan(plan, spec, notes_text)
+    return list(dict.fromkeys(notes))
+
+
 def _parses(text: str) -> bool:
     try:
         _parse(text)
@@ -258,34 +383,25 @@ def _parses(text: str) -> bool:
 
 
 def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[dict, list[str]]:
-    """Up to 3 attempts; the first plan without problems wins, else the last plan that parsed, with its problems."""
+    """One plan call (with its continuation); an answer that is no usable JSON object gets one retry with the error.
+    Code then settles the plan (settle_plan); what it could not repair goes back as notes, also kept in
+    plan["plan_notes"], where every code and repair call reads them."""
     system = load_prompt("rules")
     base = build_context(spec, notes_text) + "\n\n" + load_prompt("plan")
-    best: dict | None = None
-    best_problems: list[str] = []
-    problems: list[str] = []
-    previous = ""
-    for attempt in range(ATTEMPTS):
-        if attempt == 0:
-            purpose, user = "plan", base
-        else:
-            purpose = f"plan-fix-{attempt}"
-            user = base + "\n\n" + fill(load_prompt("plan_fix"), problems="\n".join(f"- {p}" for p in problems),
-                                        previous=previous)
+    user, purpose, error = base, "plan", ""
+    for attempt in range(2):
         answer = llm.complete_long(purpose, system, user, max_tokens=config.MAX_TOKENS["plan"], json_mode=True,
                                    temperature=temperature, done=_parses)
-        previous = answer.text
         try:
             plan = _parse(answer.text)
         except ValueError as e:
-            problems = [f"the answer is not one valid JSON object: {e}"]
-            continue
-        settle_modules(plan)
-        settle_areas(plan)
-        problems = validate_plan(plan, spec, notes_text)
-        best, best_problems = plan, problems
-        if not problems:
-            return plan, []
-    if best is None:
-        raise PlanError(f"no plan answer was a JSON object after {ATTEMPTS} attempts: {problems[0]}")
-    return best, best_problems
+            error = str(e)
+        else:
+            notes = settle_plan(plan, spec, notes_text)
+            if not _shape_problems(plan):
+                if notes:
+                    plan["plan_notes"] = notes
+                return plan, notes
+            error = "; ".join(notes)
+        purpose, user = "plan-retry", base + "\n\n" + fill(load_prompt("plan_fix"), error=error)
+    raise PlanError(f"no plan answer was a usable JSON object after 2 attempts: {error}")

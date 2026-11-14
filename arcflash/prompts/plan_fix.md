@@ -1,7 +1,3 @@
-Your previous plan has these problems:
-{{problems}}
+Your previous answer could not be read as one JSON object: {{error}}
 
-Your previous plan:
-{{previous}}
-
-Return the complete corrected plan as one JSON object.
+Answer again with the complete plan as one JSON object.

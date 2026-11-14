@@ -8,7 +8,7 @@ from pathlib import Path
 
 from arcflash import config
 from arcflash.llm import LLM
-from arcflash.plan import PlanError, make_plan, page_component, settle_areas, settle_modules, validate_plan
+from arcflash.plan import PlanError, make_plan, page_component, settle_areas, settle_modules, settle_plan, validate_plan
 from arcflash.prompting import build_context, load_prompt
 from arcflash.spec import load_spec
 from tests.fakes import FakeClient, FakeLLM, cut_chunks, stream_chunks
@@ -66,11 +66,9 @@ class PlanTests(unittest.TestCase):
             ("runtime name", lambda p: page(p, "note")["controls"].append({"role": "heading", "name": "{note title}", "when": "always"}),
              'page note: control name "{note title}" is filled in at runtime; describe it in "shows"'),
             ("name not in text", lambda p: page(p, "notes")["controls"][1].update(name="Add Note"),
-             'page notes: control name "Add Note" is not in the requirements or screenshot notes; copy names exactly'),
+             'page notes: control name "Add Note" is not in the requirements; check the wording'),
             ("twice on page", lambda p: page(p, "note_new")["controls"].append({"role": "button", "name": "Cancel", "when": "always"}),
              'page note_new: button "Cancel" appears twice'),
-            ("repeats layout", lambda p: page(p, "notes")["controls"].append({"role": "link", "name": "Notes", "when": "always"}),
-             'page notes: link "Notes" repeats a layout control; header controls belong only in layout'),
             ("role name missing", lambda p: page(p, "notes")["controls"].pop(0),
              'the requirements name region "Note list", but no page or layout control has it'),
             ("api method", lambda p: p["api"][0].update(method="FETCH"), "api 1: method must be GET, POST, PUT, PATCH or DELETE"),
@@ -182,37 +180,112 @@ class PlanTests(unittest.TestCase):
         problems = validate_plan(plan, self.spec)
         self.assertFalse([p for p in problems if "module" in p or "pages;" in p], problems)
 
-    def test_problems_are_sent_back(self):
-        plan_without_req_1_3 = mutated(without_req_1_3)
-        llm = FakeLLM({"plan-fix": [json.dumps(golden_plan())], "plan": [json.dumps(plan_without_req_1_3)]})
-        plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
-        self.assertEqual(problems, []); self.assertEqual(llm.calls[1]["purpose"], "plan-fix-1")
-        self.assertIn("- requirement REQ-1.3 is on no page", llm.calls[1]["user"])
-        self.assertIn(json.dumps(plan_without_req_1_3), llm.calls[1]["user"])
-        self.assertTrue(llm.calls[1]["user"].startswith(llm.calls[0]["user"] + "\n\nYour previous plan has these problems:\n"))
+    # Task 7: the plan is settled by code; the plan-fix calls took 102 of 604 minutes in v4 (evidence.md 2.4).
+    def test_one_plan_call_and_no_plan_fix(self):
+        llm = FakeLLM({"plan": [json.dumps(mutated(without_req_1_3))]})
+        plan, notes = make_plan(load_spec(NOTES), "", llm, temperature=0.6)
+        self.assertEqual(([c["purpose"] for c in llm.calls], notes), (["plan"], []))
+        self.assertIn("REQ-1.3", page(plan, "notes")["reqs"])
+        self.assertEqual(llm.calls[0]["temperature"], 0.6)
 
-    def test_three_bad_answers_return_the_last_with_problems(self):
-        bad = [json.dumps(mutated(without_req_1_3))] * 2
-        last = mutated(lambda p: (without_req_1_3(p), p["pages"][0].update(title="Last")))
-        llm = FakeLLM({"plan-fix": bad[:1] + [json.dumps(last)], "plan": bad[1:]})
-        plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.6)
-        self.assertEqual((plan["pages"][0]["title"], problems, len(llm.calls)), ("Last", ["requirement REQ-1.3 is on no page"], 3))
-        self.assertEqual([c["purpose"] for c in llm.calls], ["plan", "plan-fix-1", "plan-fix-2"])
-        self.assertTrue(all(c["temperature"] == 0.6 for c in llm.calls))
+    def test_an_unparsable_plan_gets_one_retry_with_the_error(self):
+        llm = FakeLLM({"plan-retry": [json.dumps(golden_plan())], "plan": ["not json"]})
+        plan, notes = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
+        self.assertEqual(([c["purpose"] for c in llm.calls], notes), (["plan", "plan-retry"], []))
+        self.assertTrue(llm.calls[1]["user"].startswith(llm.calls[0]["user"] + "\n\nYour previous answer could not be read as one JSON object: "))
+        shape = FakeLLM({"plan-retry": [json.dumps(golden_plan())], "plan": [json.dumps({"app": [], "pages": {}})]})
+        self.assertEqual(make_plan(load_spec(NOTES), "", shape, temperature=0.2)[0], golden_plan())
+        self.assertIn("plan.app must be an object", shape.calls[1]["user"])
 
-    def test_invalid_json_counts_as_an_attempt(self):
-        llm = FakeLLM({"plan-fix": [json.dumps(golden_plan())], "plan": ["not json"]})
-        plan, problems = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
-        self.assertEqual((len(llm.calls), problems), (2, []))
-        self.assertIn("- the answer is not one valid JSON object:", llm.calls[1]["user"])
+    def test_plan_notes_reach_the_code_calls_inside_the_plan(self):
+        llm = FakeLLM({"plan": [json.dumps(mutated(lambda p: page(p, "notes")["controls"][1].update(name="Add Note")))]})
+        plan, notes = make_plan(load_spec(NOTES), "", llm, temperature=0.2)
+        self.assertEqual(notes, ['page notes: control name "Add Note" is not in the requirements; check the wording'])
+        self.assertEqual(plan["plan_notes"], notes)
+
+    def test_never_parsed_raises(self):
+        llm = FakeLLM({"plan-retry": ["[1, 2]"], "plan": ["not json"]})
+        with self.assertRaises(PlanError): make_plan(load_spec(NOTES), "", llm, temperature=0.2)
+        self.assertEqual(len(llm.calls), 2)
+
+    def settled(self, change, spec=None):
+        plan = mutated(change)
+        return plan, settle_plan(plan, spec or self.spec)
+
+    def test_runtime_names_move_to_shows(self):
+        plan, notes = self.settled(lambda p: page(p, "note")["controls"] + [
+            page(p, "note")["controls"].append({"role": "heading", "name": "{note title}", "when": "always"}),
+            page(p, "note")["controls"].append({"role": "region", "name": "Note <created title>", "when": "always"})])
+        names = [c["name"] for c in page(plan, "note")["controls"]]
+        self.assertNotIn("{note title}", names); self.assertNotIn("Note <created title>", names)
+        self.assertIn('heading "{note title}"', page(plan, "note")["shows"])
+        self.assertIn('region "Note <created title>"', page(plan, "note")["shows"])
+        self.assertEqual(notes, [])
+
+    def test_a_template_name_from_the_requirements_is_still_a_runtime_name(self):
+        # v4 Keep: the spec writes link names as "Open {title}"; 17 such controls were sent to plan-fix.
+        spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + '\nEach note has a link named "Open {title}".')
+        plan, notes = self.settled(lambda p: page(p, "notes")["controls"].append({"role": "link", "name": "Open {title}", "when": "per note"}), spec)
+        self.assertNotIn("Open {title}", [c["name"] for c in page(plan, "notes")["controls"]])
+        self.assertIn('link "Open {title}"', page(plan, "notes")["shows"]); self.assertEqual(notes, [])
+
+    def test_a_bracketed_name_from_the_requirements_stays_a_control(self):
+        spec = dataclasses.replace(self.spec, corpus=self.spec.corpus + '\n"Tag <draft>"(role=button) marks a draft.',
+                                   role_names=self.spec.role_names + [("button", "Tag <draft>")])
+        plan, notes = self.settled(lambda p: page(p, "note")["controls"].append({"role": "button", "name": "Tag <draft>", "when": "always"}), spec)
+        self.assertIn("Tag <draft>", [c["name"] for c in page(plan, "note")["controls"]])
+        self.assertEqual(notes, [])
+
+    def test_exact_duplicates_go_and_different_when_stays(self):
+        def change(p):
+            c = page(p, "note_new")["controls"]
+            c.append({"role": "button", "name": "Cancel", "when": "always"})          # exact duplicate
+            page(p, "note")["controls"].append({"role": "button", "name": "Delete", "when": "per row"})
+        plan, notes = self.settled(change)
+        self.assertEqual([c["name"] for c in page(plan, "note_new")["controls"]].count("Cancel"), 1)
+        self.assertEqual([c["name"] for c in page(plan, "note")["controls"]].count("Delete"), 2)
+        self.assertEqual(notes, [])
+
+    def test_a_layout_repeat_becomes_a_note_for_the_code_writers(self):
+        # evidence.md 6.4: the grader does not scope an unscoped lookup, so a page control with a layout name must
+        # either be scoped by the requirement or hide the layout's control on that page.
+        plan, notes = self.settled(lambda p: page(p, "notes")["controls"].append({"role": "link", "name": "Notes", "when": "always"}))
+        self.assertIn("Notes", [c["name"] for c in page(plan, "notes")["controls"]])
+        self.assertEqual(notes, ['page notes shows link "Notes" like the layout; unless the requirement acts on it inside a named '
+                                 'form or region, hide the layout\'s "Notes" on route /notes'])
+
+    def test_an_orphan_requirement_joins_the_page_of_its_group(self):
+        plan, notes = self.settled(without_req_1_3)
+        self.assertEqual([p["id"] for p in plan["pages"] if "REQ-1.3" in p["reqs"]], ["notes"])   # most REQ-1.* reqs
+        self.assertEqual(notes, [])
+
+    def test_a_named_control_on_no_page_is_added_to_its_requirement_page(self):
+        plan, notes = self.settled(lambda p: page(p, "notes")["controls"].pop(0))   # region "Note list" (REQ-1.1)
+        self.assertIn({"role": "region", "name": "Note list", "when": "always"}, page(plan, "notes")["controls"])
+        self.assertEqual(notes, [])
+
+    def test_ids_routes_api_and_roles_are_fixed_mechanically(self):
+        def change(p):
+            page(p, "notes").update(route="notes")
+            p["api"][0]["method"] = "get"; p["api"].append(dict(p["api"][0]))
+            p.update(auth={"accounts": True})
+            page(p, "notes")["controls"].append({"role": "menuitem", "name": "Create Note", "when": "always", "to": "/notes/new"})
+        plan, notes = self.settled(change)
+        self.assertEqual(page(plan, "notes")["route"], "/notes")
+        self.assertEqual([(a["method"], a["path"]) for a in plan["api"]].count(("GET", "/api/notes")), 1)
+        self.assertIn(("GET", "/api/session"), [(a["method"], a["path"]) for a in plan["api"]])
+        self.assertNotIn("menuitem", [c["role"] for c in page(plan, "notes")["controls"]])
+        self.assertEqual(notes, [])
+        upper, notes = self.settled(lambda p: p["pages"][0].update(id="Home"))
+        self.assertEqual((upper["pages"][0]["id"], notes), ("home", []))
+
+    def test_an_unknown_role_stays_with_a_note(self):
+        plan, notes = self.settled(lambda p: page(p, "notes")["controls"].append({"role": "menu-item", "name": "Notes", "when": "after x"}))
+        self.assertIn('page notes: role "menu-item" is not an ARIA role', notes)
 
     def test_fenced_json_is_read(self):
         llm = FakeLLM({"plan": ["```json\n" + json.dumps(golden_plan()) + "\n```"]})
         self.assertEqual(make_plan(load_spec(NOTES), "", llm, temperature=0.2), (golden_plan(), []))
-
-    def test_never_parsed_raises(self):
-        llm = FakeLLM({"plan-fix": ["not json", "[1, 2]"], "plan": ["not json"]})
-        with self.assertRaises(PlanError): make_plan(load_spec(NOTES), "", llm, temperature=0.2)
 
     def test_plan_answer_cut_by_length_is_continued(self):
         text = json.dumps(golden_plan()); cut = len(text) // 2
