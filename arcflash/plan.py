@@ -265,7 +265,6 @@ def settle_areas(plan: dict) -> list[str]:
     notes = []
     layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
     layout_controls = _dicts(layout.get("controls", []))
-    layout_names = {c.get("name") for c in layout_controls}
     owners = [("layout", layout_controls, set())] + [(f"page {p.get('id')}", _dicts(p.get("controls", [])), None)
                                                      for p in _dicts(plan.get("pages", []))]
     for where, controls, _ in owners:
