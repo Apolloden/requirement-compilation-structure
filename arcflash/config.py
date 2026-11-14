@@ -26,10 +26,10 @@ MAX_ATTEMPTS = 2
 GOOD_ENOUGH_PASS_RATIO = 0.5
 MAX_RUN_SECONDS = 120 * 60       # no new repair round or restart after this (runtime is not scored; no platform limit known)
 RESCUE_UNTIL_SECONDS = 180 * 60  # an app that does not start still gets repair rounds until this
-# No new model request after this; one in flight finishes and the best version ships. Worst case about 286 min:
-# 240 + a request in flight (the endpoint ends every request by 1,201 s) + a check (build 300 s, start 30 s, browser
-# 1,200 s). Under the 370 min ArcFable BookStack ran on ARC-Bench.
-HARD_STOP_SECONDS = 240 * 60
+# No new model request after this; one in flight finishes and the best version ships. Worst case about 226 min:
+# 180 + a request in flight (the endpoint ends every request by 1,201 s, 20 min) + a check (build 300 s, start 30 s,
+# browser 1,200 s; about 25 min). ArcLaser's repair answers are capped at 8k tokens, so rounds are short.
+HARD_STOP_SECONDS = 180 * 60
 REPAIR_RESERVE_SECONDS = 4 * 60
 NOTES_WAIT_SECONDS = 300         # code generation waits at most this long (from the notes' start) for screenshot notes
 ATTEMPT_RESERVE_SECONDS = 15 * 60

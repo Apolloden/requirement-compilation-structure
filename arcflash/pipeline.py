@@ -3,9 +3,11 @@ check → repair → restart once → ship."""
 from __future__ import annotations
 
 import json
+import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,6 +81,62 @@ class Budget:
         if billed >= self.cap_cny * config.RESTART_COST_SHARE:
             return f"cost: estimated ¥{billed:.2f}; a restart needs less than ¥{self.cap_cny * config.RESTART_COST_SHARE:.2f}"
         return None
+
+
+class Timeline:
+    """Phases with start and end in seconds since the run started (Task 12)."""
+
+    def __init__(self, clock, start: float) -> None:
+        self.clock, self.start, self.phases, self._lock = clock, start, [], threading.Lock()
+
+    def add(self, phase: str, t0: float, t1: float) -> None:
+        with self._lock:
+            self.phases.append({"phase": phase, "start": round(t0 - self.start, 1), "end": round(t1 - self.start, 1)})
+
+    @contextmanager
+    def span(self, phase: str):
+        t0 = self.clock()
+        try:
+            yield
+        finally:
+            self.add(phase, t0, self.clock())
+
+    def sorted(self) -> list[dict]:
+        with self._lock:
+            return sorted(self.phases, key=lambda p: (p["start"], p["end"]))
+
+
+def _module_of(purpose: str) -> str:
+    return purpose.removeprefix("frontend:").split("+")[0].removesuffix("-again")
+
+
+def critical_output_tokens(records: list[dict]) -> int:
+    """Output tokens of the calls that run one after another: per attempt (a new one starts at each "plan" call) the plan,
+    the longer of the backend and the shell plus the longest page module, and every repair and quick-fix call. Notes and
+    the test writer run beside them and do not count. Runtime is this number divided by the endpoint's speed."""
+    total, segment = 0, None
+    def close(seg):
+        if seg is None:
+            return 0
+        code = max(seg["backend"], seg["shell"] + max(seg["modules"].values(), default=0))
+        return seg["plan"] + code + seg["repair"]
+    for r in records:
+        purpose, out = str(r.get("purpose", "")), int(r.get("output", 0) or 0)
+        if purpose == "plan" or segment is None:
+            total += close(segment)
+            segment = {"plan": 0, "backend": 0, "shell": 0, "modules": {}, "repair": 0}
+        if purpose.startswith("plan"):
+            segment["plan"] += out
+        elif purpose.startswith("backend"):
+            segment["backend"] += out
+        elif purpose.startswith("frontend:shell"):
+            segment["shell"] += out
+        elif purpose.startswith("frontend:"):
+            mid = _module_of(purpose)
+            segment["modules"][mid] = segment["modules"].get(mid, 0) + out
+        elif purpose.startswith(("repair:", "quick_fix:")):
+            segment["repair"] += out
+    return total + close(segment)
 
 
 def good_enough(report: CheckReport) -> bool:
@@ -159,6 +217,9 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
 
     if llm is not None:
         result["usage"], result["calls"] = llm.usage.totals(), llm.usage.records()
+        result["critical_output_tokens"] = critical_output_tokens(result["calls"])
+    if "timeline" in state:
+        result["timeline"] = state["timeline"].sorted()
     result["seconds"] = round(clock() - started, 1)
     ws.save_json("run.json", result)
     u, s = result["usage"], result["shipped"]
@@ -189,6 +250,7 @@ def _ship(ws: Workspace, state: dict, result: dict) -> None:
 def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: dict, state: dict) -> None:
     """Steps 2 to 6; every checked version is added to state["versions"] as soon as it exists."""
     budget = Budget(llm.usage, len(spec.scenarios), clock=clock)
+    timeline = state["timeline"] = Timeline(clock, budget.started)
     versions: list[tuple[CheckReport, Path]] = state["versions"]
     with ThreadPoolExecutor(max_workers=4) as pool:
         # 2-3. background installs, the independent tests and the screenshot notes; the plan does not wait for the notes
@@ -198,6 +260,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
         notes: dict[str, str] = {}
         notes_started = clock()
         notes_future = pool.submit(describe_images, spec, req_dir, llm, notes)
+        notes_future.add_done_callback(lambda f: timeline.add("notes", notes_started, clock()))
         _say("installing packages, writing tests and screenshot notes in the background")
         notes_text: str | None = None
         tests: dict[str, str] | None = None
@@ -218,7 +281,8 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             attempt_started = clock()
             try:
                 _say(f"attempt {n}: plan")
-                plan, attempt["plan_problems"] = make_plan(spec, "", llm, temperature=temperature)
+                with timeline.span(f"plan a{n}"):
+                    plan, attempt["plan_problems"] = make_plan(spec, "", llm, temperature=temperature)
                 ws.save_json(f"plan-{n}.json", plan)
                 if notes_text is None:   # code uses the layout hints of the notes: wait for them, at most NOTES_WAIT_SECONDS
                     try:
@@ -229,7 +293,8 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
                     ws.save_json("notes.json", done)
                     notes_text = notes_block(spec, done)
                 _say(f"attempt {n}: backend and frontend")
-                files, attempt["generation_problems"] = generate_app(spec, notes_text, plan, llm, temperature=temperature)
+                with timeline.span(f"code a{n}"):
+                    files, attempt["generation_problems"] = generate_app(spec, notes_text, plan, llm, temperature=temperature)
             except (PlanError, GenerationError, LLMError) as e:
                 attempt["error"] = str(e)
                 result["errors"].append(f"attempt {n}: {e}")
@@ -252,9 +317,11 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             if not harness_ok:
                 result["errors"].append("the browser harness is not available; checks stop after the start:\n" + harness.log[-2000:])
             _say(f"attempt {n}: check")
-            first = tools.check(ws, plan, harness_ok)
+            with timeline.span(f"check a{n}-r0"):
+                first = tools.check(ws, plan, harness_ok)
             context = build_context(spec, notes_text, plan)
-            best, snapshot = repair_loop(ws, context, plan, llm, first, lambda: tools.check(ws, plan, harness_ok), budget, f"a{n}")
+            best, snapshot = repair_loop(ws, context, plan, llm, first, lambda: tools.check(ws, plan, harness_ok), budget, f"a{n}",
+                                         timeline=timeline)
             budget.attempt_seconds = clock() - attempt_started
             attempt["rounds"] = _rounds(ws, f"a{n}")
             versions.append((best, snapshot))

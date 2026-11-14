@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
@@ -134,10 +135,11 @@ def _apply(llm, purpose: str, system: str, context: str, files: dict[str, str], 
 
 
 def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport,
-                check: Callable[[], CheckReport], budget, label: str) -> tuple[CheckReport, Path]:
+                check: Callable[[], CheckReport], budget, label: str, timeline=None) -> tuple[CheckReport, Path]:
     """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone. Returns the best report and snapshot.
     A booted app needs budget kind "repair"; one that does not start needs only "rescue"."""
     system = load_prompt("rules")
+    span = timeline.span if timeline is not None else (lambda phase: nullcontext())
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
     note, without_gain, quick_tried = "", 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
     for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
@@ -155,16 +157,18 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
             task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
                         problems=best.to_prompt(test_files=tests, layout_areas=_layout_areas(plan)))
         try:
-            answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
-                                       stop_when=RepeatGuard(), continue_cut=False)
-            new = _apply(llm, purpose, system, context, files, answer.text)
+            with span(f"{purpose.split(':')[0].replace('_', ' ')} {label}.{n}"):
+                answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
+                                           stop_when=RepeatGuard(), continue_cut=False)
+                new = _apply(llm, purpose, system, context, files, answer.text)
         except LLMError:
             break
         if new == files:   # nothing applied: the check would repeat the last result
             without_gain += 1
             continue
         ws.write({k: v for k, v in new.items() if files.get(k) != v})
-        report = check()
+        with span(f"check {label}-r{n}"):
+            report = check()
         snapshot = ws.snapshot(f"{label}-r{n}", _meta(f"{label}-r{n}", report))
         if report.rank() > best.rank():
             best, best_snapshot, note, without_gain, quick_tried = report, snapshot, "", 0, False

@@ -71,6 +71,14 @@ class RepairTests(unittest.TestCase):
         meta = json.loads((self.ws.versions / "a1-r1" / "meta.json").read_text())
         self.assertEqual((meta["scenarios_passed"], meta["built"]), (3, True))
 
+    def test_rounds_and_their_checks_are_on_the_timeline(self):
+        from arcflash.pipeline import Timeline
+        import time as _time
+        timeline = Timeline(_time.monotonic, _time.monotonic())
+        llm = FakeLLM({"repair:": [edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Fixed notebook.</p>")]})
+        repair_loop(self.ws, "CTX", golden_plan(), llm, self.failing, lambda: self.green, Budget(True), "a1", timeline=timeline)
+        self.assertEqual([p["phase"] for p in timeline.sorted()], ["repair a1.1", "check a1-r1"])
+
     def test_worse_round_is_undone_and_reported(self):
         llm = FakeLLM({"repair:": [edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Broken.</p>"),
                                    edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Fixed notebook.</p>")]})

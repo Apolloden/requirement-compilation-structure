@@ -14,7 +14,7 @@ from arcflash import config
 from arcflash.check import CheckReport
 from arcflash.harness import HarnessStatus, TestResult
 from arcflash.llm import LLMError, Usage
-from arcflash.pipeline import Budget, Tools, good_enough, run
+from arcflash.pipeline import Budget, Tools, critical_output_tokens, good_enough, run
 from arcflash.proc import ProcResult
 from tests.fakes import FakeLLM, as_blocks
 from tests.golden import golden_files, golden_plan
@@ -100,6 +100,27 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("shipped a1-r0", self.printed.getvalue())
         self.assertFalse((self.out / "frontend/src/pages/main.jsx").exists())   # no template page left beside the modules
         self.assertEqual(saved["agent"], "arclaser"); self.assertIn("[arclaser] shipped a1-r0", self.printed.getvalue())
+
+    # Task 12: time measured in output tokens on the critical path, independent of the endpoint's speed.
+    def test_critical_output_tokens_count_plan_the_longest_code_path_and_repairs(self):
+        r = lambda purpose, out: {"purpose": purpose, "output": out}
+        records = [r("vision:a.png", 200), r("tests:1", 4000), r("plan", 9000), r("plan+1", 1000),
+                   r("backend", 12000), r("frontend:shell", 4000), r("frontend:m1", 6000), r("frontend:m2", 5000),
+                   r("frontend:m2-again", 3000), r("frontend:m1+1", 500), r("repair:a1.1", 8000), r("repair:a1.1.fix", 300),
+                   r("quick_fix:a1.2", 700),
+                   r("plan", 7000), r("backend", 9000), r("frontend:shell", 2000), r("frontend:m1", 8000)]
+        # attempt 1: 10000 + max(12000, 4000 + 8000) + 9000; attempt 2: 7000 + max(9000, 2000 + 8000)
+        self.assertEqual(critical_output_tokens(records), 10000 + 12000 + 9000 + 7000 + 10000)
+
+    def test_run_json_has_a_timeline_and_the_critical_tokens(self):
+        result = self.run_quiet(NOTES, self.out, llm=golden_llm(), tools=tools(reports=[report(passed=1), GREEN]))
+        phases = [p["phase"] for p in result["timeline"]]
+        for phase in ("notes", "plan a1", "code a1", "check a1-r0", "repair a1.1"):   # the fake repair edits nothing: no new check
+            self.assertIn(phase, phases)
+        self.assertTrue(all(0 <= p["start"] <= p["end"] for p in result["timeline"]))
+        self.assertEqual(result["critical_output_tokens"], critical_output_tokens(result["calls"]))
+        saved = json.loads((self.out / ".arc/run.json").read_text())
+        self.assertEqual(saved["timeline"], result["timeline"])
 
     def test_restart_when_the_first_attempt_does_not_start(self):
         llm = golden_llm(attempts=2)
