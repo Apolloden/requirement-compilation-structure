@@ -21,6 +21,9 @@ MAX_ATTEMPTS = 2
 GOOD_ENOUGH_PASS_RATIO = 0.5
 MAX_RUN_SECONDS = 120 * 60       # no new repair round or restart after this (runtime is not scored; no platform limit known)
 RESCUE_UNTIL_SECONDS = 180 * 60  # an app that does not start still gets repair rounds until this
+# No new model request after this; one in flight finishes and the best version ships. Worst case about 295 min
+# (240 + a 12k-token repair segment at 7 tokens/s + a check), under the 370 min ArcFable BookStack ran on ARC-Bench.
+HARD_STOP_SECONDS = 240 * 60
 REPAIR_RESERVE_SECONDS = 4 * 60
 ATTEMPT_RESERVE_SECONDS = 15 * 60
 MIN_RUN_COST_CNY = 2.0

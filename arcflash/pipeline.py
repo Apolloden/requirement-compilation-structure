@@ -142,7 +142,7 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
                            "scenarios": len(spec.scenarios), "images": len(spec.images), "assets": len(spec.assets)}
         _say(f"read {len(spec.leaves)} leaf requirements, {len(spec.scenarios)} scenarios, {len(spec.images)} screenshots")
         try:
-            llm = llm or LLM(log_dir=ws.calls_dir)
+            llm = llm or LLM(log_dir=ws.calls_dir, clock=clock)
         except LLMError as e:
             result["errors"].append(str(e))
             _say(f"no model: {e}")

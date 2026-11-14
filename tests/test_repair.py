@@ -117,6 +117,16 @@ class RepairTests(unittest.TestCase):
         self.run_loop(llm, [], budget={"rescue"}, first=white)
         self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2"])
 
+    def test_after_the_hard_stop_the_best_version_ships_without_a_request(self):
+        from arcflash.llm import LLM
+        from tests.fakes import FakeClient
+        client = FakeClient([])
+        now = [0.0]
+        llm = LLM(client=client, sleep=lambda s: None, clock=lambda: now[0])
+        now[0] = config.HARD_STOP_SECONDS + 60
+        best, snap = self.run_loop(llm, [], budget={"repair", "rescue"})
+        self.assertEqual((client.requests, snap.name, best.scenario_passed), ([], "a1-r0", 1))
+
     def test_an_answer_without_edits_is_a_round_without_gain(self):
         llm = FakeLLM({"repair:": ["I cannot help.", "Still nothing."]})
         best, snap = self.run_loop(llm, [])

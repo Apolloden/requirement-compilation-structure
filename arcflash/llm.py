@@ -113,7 +113,8 @@ def _render_for_log(messages: list[dict], image_note: str = "") -> str:
 
 
 class LLM:
-    def __init__(self, *, usage: Usage | None = None, log_dir: Path | None = None, client=None, sleep=time.sleep) -> None:
+    def __init__(self, *, usage: Usage | None = None, log_dir: Path | None = None, client=None, sleep=time.sleep,
+                 clock=time.monotonic) -> None:
         if client is None:
             key = os.environ.get("OPENAI_API_KEY")
             if not key:
@@ -124,6 +125,8 @@ class LLM:
         self.usage = usage if usage is not None else Usage()
         self.log_dir = Path(log_dir) if log_dir else None
         self.sleep = sleep
+        self.clock = clock
+        self.started = clock()   # HARD_STOP_SECONDS counts from here
         self._dropped: set[str] = set()
         self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(config.MAX_PARALLEL_CALLS)
@@ -206,6 +209,8 @@ class LLM:
         waits = list(config.RETRY_WAITS)
         slots = self._background_slots if background else self._slots
         while True:
+            if self.clock() - self.started > config.HARD_STOP_SECONDS:
+                raise LLMError(f"{purpose}: hard stop after {config.HARD_STOP_SECONDS // 60} minutes; no new request")
             kwargs = self._kwargs(messages, max_tokens, json_mode, temperature)
             try:
                 with slots:
@@ -241,8 +246,9 @@ class LLM:
                 except Exception as e:
                     if not text:   # nothing arrived yet: the request is retried
                         raise _StreamError(str(e)) from e
-                    finish = "cut"  # an idle timeout or a dropped connection mid-answer: keep the text, continue it
-                    break
+                    if finish is None:   # an idle timeout or a dropped connection mid-answer: keep the text, continue it
+                        finish = "cut"
+                    break                # after the finish chunk only the usage record was lost: the answer is whole
                 if getattr(chunk, "usage", None):
                     usage = chunk.usage
                 for choice in getattr(chunk, "choices", None) or []:

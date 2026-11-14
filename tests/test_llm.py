@@ -57,7 +57,7 @@ class LLMTests(unittest.TestCase):
     def test_error_after_text_keeps_the_text_and_continues(self):
         # v3 PrestaShop: 843 s of the plan phase are in no record, one attempt thrown away mid-answer and retried.
         def broken():
-            yield from stream_chunks("line one\nline two", pieces=1)[:1]
+            yield from stream_chunks("line one\nline two", finish=None, pieces=1)[:1]
             raise connection_error()   # an idle read timeout or "peer closed connection" mid-answer
         llm = self.make([broken(), stream_chunks("\nline three")])
         c = llm.complete_long("plan", None, "u", max_tokens=10)
@@ -116,6 +116,31 @@ class LLMTests(unittest.TestCase):
         self.assertEqual((c.text, c.finish_reason), ("line one\nline two\nline three", "stop"))
         self.assertEqual([r["purpose"] for r in llm.usage.records()], ["plan", "plan+1"])
         self.assertEqual(llm.usage.records()[0]["finish"], "cut")
+
+    def test_an_error_after_the_finish_chunk_keeps_the_finish_reason(self):
+        # Second review point 2: the error came after "stop" but before the usage chunk; the answer is whole.
+        def broken():
+            yield from stream_chunks("done", pieces=1)[:1]   # the content chunk with finish_reason "stop"
+            raise connection_error()
+        llm = self.make([broken(), stream_chunks("never sent")])
+        c = llm.complete_long("repair", None, "u", max_tokens=10)
+        self.assertEqual((c.text, c.finish_reason, len(self.client.requests)), ("done", "stop", 1))
+
+    def test_no_request_after_the_hard_stop(self):
+        # Second review point 3: past HARD_STOP_SECONDS every new request (first call, continuation, retry) fails at once.
+        now = [0.0]
+        client = FakeClient([stream_chunks("a", finish="length"), stream_chunks("b"), stream_chunks("c")])
+        llm = LLM(client=client, sleep=self.sleeps.append, clock=lambda: now[0])
+        def jump(*args, **kwargs):
+            now[0] = config.HARD_STOP_SECONDS + 1
+            return original(*args, **kwargs)
+        original, client.chat.completions.create = client.chat.completions.create, jump
+        with self.assertRaises(LLMError):
+            llm.complete_long("x", None, "u", max_tokens=10)   # the call in flight finishes; its continuation is refused
+        self.assertEqual(len(client.requests), 1)
+        with self.assertRaises(LLMError):
+            llm.complete("y", None, "u", max_tokens=10)
+        self.assertEqual(len(client.requests), 1)
 
     def test_a_call_without_usage_is_estimated_from_characters(self):
         # Review point 5: v3's longest calls (plan, frontend:main) had no usage record and counted as 0 tokens.
