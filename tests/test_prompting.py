@@ -10,7 +10,7 @@ from tests.support import AGENT_ROOT, FIXTURES
 
 NOTES = FIXTURES / "specs" / "notes"
 PLAN_DOC = AGENT_ROOT.parent / "docs" / "3-arcflash" / "arcflash-plan.md"
-AMENDED = {"rules", "tests", "plan", "repair"}   # changed on evidence; see docs/3-arcflash/arcflash-changes.md and docs/6-arclaser/arclaser-changes.md
+AMENDED = {"rules", "tests", "plan", "repair", "frontend_first", "frontend_more"}   # changed on evidence; see docs/3-arcflash/arcflash-changes.md and docs/6-arclaser/arclaser-changes.md
 ADDED = {"kept_files", "quick_fix"}    # added after the blueprint (docs/5-arcflash-v4/plan.md, review point 3; ArcLaser Task 5)
 
 
@@ -56,6 +56,12 @@ class PromptTests(unittest.TestCase):
         tests = load_prompt("tests")
         self.assertIn("Scope a lookup to a named form, region or dialog exactly when the step acts inside it", tests)
         self.assertIn("otherwise look it up in the whole page, as the grader does", tests)
+
+    def test_a_control_can_be_placed_inside_an_area(self):
+        # Task 6b (docs/6-arclaser/evidence.md 6.2): "Ask Question" outside the feed region blocked every create flow.
+        self.assertIn('gets "in": "X", and X is a control too', load_prompt("plan"))
+        for name in ("frontend_first", "frontend_more"):
+            self.assertIn('Render a control with "in" inside the element of the area it names', load_prompt(name))
 
     def test_helpers_export_every_role_helper(self):
         # evidence.md C1: with only region() available, our tests looked up a navigation landmark as a region, like the code.

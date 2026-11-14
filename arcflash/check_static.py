@@ -198,6 +198,66 @@ def _rendered_roles(src: str, name: str) -> list[tuple[str, str | None]]:
     return hits
 
 
+AREA_TAGS = frozenset({"section", "nav", "div", "form", "article", "tr", "li", "dialog", "aside", "header", "footer",
+                       "fieldset", "table", "tbody", "ul", "ol", "main"})
+
+
+def _element_spans(src: str, name: str) -> list[tuple[int, int, int]]:
+    """(start, end of the opening tag, end) of every plain element whose literal aria-label is the name, from its opening tag to the matching
+    closing tag (nested tags of the same name counted). Components and computed labels are left out."""
+    spans = []
+    for m in ARIA_LABEL.finditer(src):
+        value = _attribute_value(src, m.end())
+        starts = list(TAG_START.finditer(src, 0, m.start()))
+        if value is None or value.strip() != name.strip() or not starts or starts[-1].group(1) not in AREA_TAGS:
+            continue
+        start, tag = starts[-1].start(), starts[-1].group(1)
+        i = _tag_end(src, starts[-1].end())
+        opened = i
+        if src[i - 2] == "/":
+            spans.append((start, i, i))
+            continue
+        depth, pattern, end = 1, re.compile(rf"<(/?){tag}\b"), len(src)
+        while depth:
+            t = pattern.search(src, i)
+            if not t:
+                break
+            if t.group(1):
+                depth, i = depth - 1, t.end()
+                end = i
+            else:
+                i = _tag_end(src, t.end())
+                depth += src[i - 2] != "/"
+        spans.append((start, opened, end if not depth else len(src)))
+    return spans
+
+
+def area_issues(files: dict[str, str], plan: dict) -> list[str]:
+    """Rule 6b: a control planned "in" a named area must be rendered inside that area's element (evidence.md 6.2).
+    Judged only in a file that renders both the area (a plain tag with a literal aria-label) and the control's name."""
+    issues = []
+    frontend = {k: v for k, v in files.items() if k.startswith("frontend/")}
+    layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
+    groups = [[c for c in layout.get("controls", []) if isinstance(c, dict)]]
+    groups += [[c for c in p.get("controls", []) if isinstance(c, dict)] for p in plan.get("pages", []) if isinstance(p, dict)]
+    for controls in groups:
+        for c in controls:
+            area, name = c.get("in"), str(c.get("name", "")).strip()
+            if not isinstance(area, str) or not area.strip() or not name:
+                continue
+            area_role = next((str(x.get("role")) for x in controls + groups[0] if x is not c and x.get("name") == area), "region")
+            n = re.escape(name)
+            occurrence = re.compile(rf"([\"'`])\s*{n}\s*\1|>\s*{n}\s*<")
+            for key, src in frontend.items():
+                spans = _element_spans(src, area)
+                places = [m.start() for m in occurrence.finditer(src)]
+                places = [p for p in places if not any(a <= p < o for a, o, _ in spans)]   # not the area's own label
+                if spans and places and not any(o <= p < b for p in places for _, o, b in spans):
+                    issues.append(f'{c.get("role")} "{name}" is outside {area_role} "{area}" in {key}; '
+                                  'render it inside that element (the requirement puts it there)')
+    return list(dict.fromkeys(issues))
+
+
 def _placeholders(sources: list[str]) -> set[str]:
     return {v.strip() for src in sources for m in PLACEHOLDER.finditer(src) if (v := _attribute_value(src, m.end())) is not None}
 
@@ -354,6 +414,9 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
         for key in layout_modules:
             if key in files and tag.search(files[key]):
                 issues.append(f'{key} repeats the layout {control["role"]} "{name}"; the layout already shows it on every page (rule 5)')
+
+    # 8b2: controls planned inside a named area are rendered inside it (Task 6b)
+    issues += area_issues(files, plan)
 
     # 8c: hover menus that a click closes (rule 16)
     issues += menu_issues(frontend)

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from arcflash import config
 from arcflash.llm import LLM
-from arcflash.plan import PlanError, make_plan, page_component, settle_modules, validate_plan
+from arcflash.plan import PlanError, make_plan, page_component, settle_areas, settle_modules, validate_plan
 from arcflash.prompting import build_context, load_prompt
 from arcflash.spec import load_spec
 from tests.fakes import FakeClient, FakeLLM, cut_chunks, stream_chunks
@@ -229,6 +229,16 @@ class PlanTests(unittest.TestCase):
         text = json.dumps(golden_plan()); cut = len(text) // 2
         llm = LLM(client=FakeClient([cut_chunks(text[:cut]), stream_chunks(text[cut:])]), sleep=lambda s: None)
         self.assertEqual(make_plan(load_spec(NOTES), "", llm, temperature=0.2), (golden_plan(), []))
+
+    def test_an_unknown_area_is_dropped_from_the_plan(self):
+        # Task 6b: "in" names an area of the same page or of the layout; anything else is dropped and noted.
+        plan = golden_plan()
+        controls = next(p for p in plan["pages"] if p["id"] == "notes")["controls"]
+        controls[1]["in"] = "Note list"
+        controls.append({"role": "button", "name": "Refresh", "when": "always", "in": "Sidebar"})
+        notes = settle_areas(plan)
+        self.assertEqual(controls[1]["in"], "Note list"); self.assertNotIn("in", controls[2])
+        self.assertEqual(notes, ['page notes: button "Refresh" was placed in "Sidebar", which is no area of that page or the layout'])
 
     def test_page_component(self):
         self.assertEqual((page_component("item_detail"), page_component("home")), ("PageItemDetail", "PageHome"))

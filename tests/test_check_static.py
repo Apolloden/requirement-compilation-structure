@@ -1,6 +1,6 @@
 import unittest
 
-from arcflash.check_static import backend_routes, frontend_api_calls, normalize_api_path, role_issues, static_issues
+from arcflash.check_static import area_issues, backend_routes, frontend_api_calls, normalize_api_path, role_issues, static_issues
 from tests.golden import golden_files, golden_plan
 
 APP = "backend/app.js"
@@ -202,6 +202,43 @@ class RoleCheckTests(unittest.TestCase):
 class MenuCheckTests(unittest.TestCase):
     # evidence.md C2: the menu opened on mouse enter and toggled on click; Playwright's click() moves the mouse first
     # (opens it), then clicks (closes it), so no menu entry was ever found.
+    # Task 6b (docs/6-arclaser/evidence.md 6.2): a control the requirement places inside a named area.
+    def inside(self, files):
+        plan = golden_plan()
+        next(c for c in page_of(plan, "notes")["controls"] if c["name"] == "Create Note")["in"] = "Note list"
+        return area_issues(files, plan)
+
+    def test_a_control_outside_its_area_is_reported(self):
+        self.assertEqual(self.inside(golden_files()), [
+            f'link "Create Note" is outside region "Note list" in {MAIN}; render it inside that element (the requirement puts it there)'])
+        plan = golden_plan()
+        next(c for c in page_of(plan, "notes")["controls"] if c["name"] == "Create Note")["in"] = "Note list"
+        self.assertIn(self.inside(golden_files())[0], static_issues(golden_files(), plan))
+
+    def test_a_control_inside_its_area_is_fine(self):
+        link = '      <Link to="/notes/new" className="inline-block rounded bg-blue-700 px-3 py-1 text-white">Create Note</Link>\n'
+        files = changed(MAIN, link, "")
+        files[MAIN] = files[MAIN].replace(
+            '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">\n',
+            '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">\n'
+            '<section aria-label="Inner"><p>x</p></section>\n' + link, 1)
+        self.assertEqual(self.inside(files), [])   # a nested section of the same tag does not end the span early
+
+    def test_the_area_label_itself_does_not_count_as_the_control(self):
+        plan = golden_plan()
+        page_of(plan, "notes")["controls"].append({"role": "button", "name": "Note list", "when": "always", "in": "Note list"})
+        files = changed(MAIN, "      <h1 className=\"text-2xl font-bold\">Notes</h1>\n      <Link to=\"/notes/new\"",
+                        "      <h1 className=\"text-2xl font-bold\">Notes</h1>\n      <button>Note list</button>\n      <Link to=\"/notes/new\"")
+        self.assertEqual(area_issues(files, plan),
+                         [f'button "Note list" is outside region "Note list" in {MAIN}; render it inside that element (the requirement puts it there)'])
+
+    def test_an_area_rendered_by_a_component_is_skipped(self):
+        files = changed(MAIN, '<section aria-label="Note list" className="rounded border border-gray-200 bg-white">',
+                        '<Panel aria-label="Note list" className="rounded border border-gray-200 bg-white">')
+        files[MAIN] = files[MAIN].replace("      </section>\n    </div>\n  );\n}\n\nexport function PageNoteNew",
+                                          "      </Panel>\n    </div>\n  );\n}\n\nexport function PageNoteNew", 1)
+        self.assertEqual(self.inside(files), [])
+
     def test_hover_menu_that_click_toggles(self):
         for setter, toggle in (("setOpen", "setOpen((v) => !v)"), ("setMenuOpen", "setMenuOpen(o => !o)"),
                                ("setOpen", "setOpen((prev) => !prev)")):

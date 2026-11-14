@@ -10,7 +10,7 @@ Write three files:
 {{imports}}
 3. frontend/src/pages/{{module}}.jsx: export one function component per page: {{components}}. Implement every requirement listed on these pages completely: every control, state, message and flow in the requirement text and its scenarios.
 
-Pages import { api } from "../api.js", what they need from "../shared.jsx", and { Link, useNavigate, useParams } from "react-router-dom". Style with Tailwind classes, following the screenshot notes.
+Pages import { api } from "../api.js", what they need from "../shared.jsx", and { Link, useNavigate, useParams } from "react-router-dom". Style with Tailwind classes, following the screenshot notes. Render a control with "in" inside the element of the area it names, never beside it.
 
 Output the three file blocks in this order and nothing else:
 === FILE: frontend/src/shared.jsx ===

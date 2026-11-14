@@ -230,6 +230,25 @@ def settle_modules(plan: dict) -> None:
             page["module"] = owner[page["id"]][0]
 
 
+def settle_areas(plan: dict) -> list[str]:
+    """Keep a control's "in" only when it names an area of the same page or of the layout (Task 6b); drop the rest,
+    in place, and return a note for each."""
+    notes = []
+    layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
+    layout_controls = _dicts(layout.get("controls", []))
+    layout_names = {c.get("name") for c in layout_controls}
+    owners = [("layout", layout_controls, set())] + [(f"page {p.get('id')}", _dicts(p.get("controls", [])), None)
+                                                     for p in _dicts(plan.get("pages", []))]
+    for where, controls, _ in owners:
+        names = layout_names | {c.get("name") for c in controls}
+        for c in controls:
+            if "in" in c and (not isinstance(c["in"], str) or c["in"] not in names or c["in"] == c.get("name")):
+                notes.append(f'{where}: {c.get("role")} "{c.get("name")}" was placed in "{c["in"]}", which is no area of '
+                             'that page or the layout')
+                del c["in"]
+    return notes
+
+
 def _parses(text: str) -> bool:
     try:
         _parse(text)
@@ -262,6 +281,7 @@ def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[
             problems = [f"the answer is not one valid JSON object: {e}"]
             continue
         settle_modules(plan)
+        settle_areas(plan)
         problems = validate_plan(plan, spec, notes_text)
         best, best_problems = plan, problems
         if not problems:
