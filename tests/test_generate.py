@@ -27,8 +27,8 @@ def pick(*keys, **extra):
 
 
 def answers(**overrides):
-    script = {"backend": [pick("backend/app.js")],
-              "frontend:m1": [pick(*SHELL, "frontend/src/pages/m1.jsx")]}
+    script = {"backend": [pick("backend/app.js")], "frontend:shell": [pick(*SHELL)],
+              "frontend:m1": [pick("frontend/src/pages/m1.jsx")]}
     script.update(overrides)
     return FakeLLM(script)
 
@@ -54,17 +54,32 @@ class GenerateTests(unittest.TestCase):
     def setUp(self):
         self.spec = load_spec(NOTES)
 
-    def test_one_module_makes_two_parallel_calls(self):
+    # Task 10: the shell (shared.jsx, App.jsx) first, beside the backend; then every module at once.
+    def test_the_shell_call_writes_only_the_two_shared_files(self):
         llm = answers()
         files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
         self.assertEqual(set(files), {"backend/app.js", "frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/m1.jsx"})
-        self.assertEqual((len(llm.calls), problems), (2, []))
-        frontend_call = call(llm, "frontend:m1")
-        self.assertIn('import { PageHome, PageNotes, PageNoteNew, PageNote } from "./pages/m1.jsx";', frontend_call["user"])
-        self.assertIn("PageHome (page home, route /), PageNotes (page notes, route /notes)", frontend_call["user"])
+        self.assertEqual((sorted(c["purpose"] for c in llm.calls), problems), (["backend", "frontend:m1", "frontend:shell"], []))
+        shell = call(llm, "frontend:shell")
+        self.assertIn('import { PageHome, PageNotes, PageNoteNew, PageNote } from "./pages/m1.jsx";', shell["user"])
+        self.assertIn("=== FILE: frontend/src/App.jsx ===", shell["user"]); self.assertNotIn("=== FILE: frontend/src/pages/", shell["user"])
         self.assertEqual(files["frontend/src/pages/m1.jsx"], golden_files()["frontend/src/pages/m1.jsx"])
-        self.assertEqual((call(llm, "backend")["max_tokens"], frontend_call["max_tokens"], frontend_call["temperature"]),
+        self.assertEqual((call(llm, "backend")["max_tokens"], shell["max_tokens"], shell["temperature"]),
                          (config.MAX_TOKENS["backend"], config.MAX_TOKENS["frontend"], 0.2))
+
+    def test_every_module_starts_after_the_shell_and_sees_it(self):
+        more = as_blocks({"frontend/src/pages/more.jsx": stub_module("more", ["PageMoreA", "PageMoreB"])})
+        llm = answers(**{"frontend:more": [more]})
+        files, problems = generate_app(self.spec, "", ten_page_plan(), llm, temperature=0.2)
+        order = [c["purpose"] for c in llm.calls]
+        for mid in ("m1", "more"):
+            module = call(llm, f"frontend:{mid}")
+            self.assertGreater(order.index(f"frontend:{mid}"), order.index("frontend:shell"))
+            self.assertIn(golden_files()["frontend/src/shared.jsx"], module["user"])
+            self.assertIn(golden_files()["frontend/src/App.jsx"], module["user"])
+        self.assertIn("PageMoreA (page more_a, route /more_a), PageMoreB (page more_b, route /more_b)", call(llm, "frontend:more")["user"])
+        self.assertIn("PageHome (page home, route /)", call(llm, "frontend:m1")["user"])
+        self.assertIn("frontend/src/pages/more.jsx", files); self.assertEqual(problems, [])
 
     def test_prompts_share_the_context_prefix(self):
         llm = answers()
@@ -79,39 +94,23 @@ class GenerateTests(unittest.TestCase):
         files, _ = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
         self.assertEqual(files["frontend/src/pages/m1.jsx"], golden_files()["frontend/src/pages/m1.jsx"])
 
-    def test_more_modules_wait_for_the_shell(self):
-        more = as_blocks({"frontend/src/pages/more.jsx": stub_module("more", ["PageMoreA", "PageMoreB"])})
-        llm = answers(**{"frontend:more": [more]})
-        files, problems = generate_app(self.spec, "", ten_page_plan(), llm, temperature=0.2)
-        order = [c["purpose"] for c in llm.calls]
-        self.assertGreater(order.index("frontend:more"), order.index("frontend:m1"))
-        self.assertIn(golden_files()["frontend/src/shared.jsx"], call(llm, "frontend:more")["user"])
-        self.assertIn(golden_files()["frontend/src/App.jsx"], call(llm, "frontend:more")["user"])
-        self.assertIn("PageMoreA (page more_a, route /more_a), PageMoreB (page more_b, route /more_b)", call(llm, "frontend:more")["user"])
-        self.assertIn("frontend/src/pages/more.jsx", files); self.assertEqual(problems, [])
-
     def test_missing_file_is_asked_for_once(self):
-        llm = answers(**{"frontend:m1-again": [pick(*SHELL, "frontend/src/pages/m1.jsx")],
-                         "frontend:m1": [pick("frontend/src/shared.jsx", "frontend/src/pages/m1.jsx")]})
+        llm = answers(**{"frontend:shell-again": [pick(*SHELL)], "frontend:shell": [pick("frontend/src/shared.jsx")]})
         files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
-        self.assertEqual([c["purpose"] for c in llm.calls if c["purpose"].startswith("frontend")], ["frontend:m1", "frontend:m1-again"])
-        self.assertIn("Your previous answer was missing these file blocks: frontend/src/App.jsx.", call(llm, "frontend:m1-again")["user"])
+        self.assertIn("frontend:shell-again", [c["purpose"] for c in llm.calls])
+        self.assertIn("Your previous answer was missing these file blocks: frontend/src/App.jsx.", call(llm, "frontend:shell-again")["user"])
         self.assertEqual(files["frontend/src/App.jsx"], golden_files()["frontend/src/App.jsx"]); self.assertEqual(problems, [])
 
-    def test_missing_extra_module_gets_a_stub(self):
-        llm = answers(**{"frontend:more": ["no blocks here", "still none"]})
-        files, problems = generate_app(self.spec, "", ten_page_plan(), llm, temperature=0.2)
-        self.assertEqual(files["frontend/src/pages/more.jsx"], stub_module("more", ["PageMoreA", "PageMoreB"]))
-        self.assertIn("module more was not generated; a stub was written", problems)
-
-    def test_failed_extra_module_call_gets_a_stub(self):
-        llm = answers(**{"frontend:more": [LLMError("busy")]})
-        files, problems = generate_app(self.spec, "", ten_page_plan(), llm, temperature=0.2)
-        self.assertEqual(files["frontend/src/pages/more.jsx"], stub_module("more", ["PageMoreA", "PageMoreB"]))
-        self.assertIn("module more was not generated; a stub was written", problems)
+    def test_missing_module_gets_a_stub(self):
+        for name, answer in (("no blocks", ["no blocks here", "still none"]), ("call failed", [LLMError("busy")])):
+            with self.subTest(name):
+                llm = answers(**{"frontend:more": answer})
+                files, problems = generate_app(self.spec, "", ten_page_plan(), llm, temperature=0.2)
+                self.assertEqual(files["frontend/src/pages/more.jsx"], stub_module("more", ["PageMoreA", "PageMoreB"]))
+                self.assertIn("module more was not generated; a stub was written", problems)
 
     def test_missing_shell_raises(self):
-        llm = answers(**{"frontend:m1": [pick("frontend/src/pages/m1.jsx")] * 2})
+        llm = answers(**{"frontend:shell": [pick("frontend/src/shared.jsx")] * 2})
         with self.assertRaises(GenerationError): generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
 
     def test_missing_backend_raises(self):
@@ -126,18 +125,17 @@ class GenerateTests(unittest.TestCase):
         # v3 Ctrip: main.jsx from the second answer imported isValidId from the second answer's shared.jsx, but the first
         # answer's shared.jsx was kept, so the build failed (docs/5-arcflash-v4/plan.md R4).
         second_shared = golden_files()["frontend/src/shared.jsx"] + "\nexport function isValidId(id) { return !!id; }\n"
-        llm = answers(**{"frontend:m1-again": [pick("frontend/src/App.jsx", "frontend/src/pages/m1.jsx",
-                                                      **{"frontend/src/shared.jsx": second_shared})],
-                         "frontend:m1": [pick(*SHELL)]})
+        llm = answers(**{"frontend:shell-again": [pick("frontend/src/App.jsx", **{"frontend/src/shared.jsx": second_shared})],
+                         "frontend:shell": [pick("frontend/src/shared.jsx")]})
         files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
         self.assertEqual(files["frontend/src/shared.jsx"], second_shared); self.assertEqual(problems, [])
+        self.assertIn(second_shared, call(llm, "frontend:m1")["user"])   # modules are written against the kept shell
 
     def test_the_re_ask_shows_the_files_already_kept(self):
         # Review point 3: a re-ask that returns only the missing file must be written against the kept files.
-        llm = answers(**{"frontend:m1-again": [pick("frontend/src/App.jsx", "frontend/src/pages/m1.jsx")],
-                         "frontend:m1": [pick("frontend/src/shared.jsx")]})
+        llm = answers(**{"frontend:shell-again": [pick("frontend/src/App.jsx")], "frontend:shell": [pick("frontend/src/shared.jsx")]})
         files, problems = generate_app(self.spec, "", golden_plan(), llm, temperature=0.2)
-        user = call(llm, "frontend:m1-again")["user"]
+        user = call(llm, "frontend:shell-again")["user"]
         self.assertIn("These files from your previous answer are kept exactly as they are.", user)
         kept = user.split("kept exactly as they are.")[1]
         self.assertIn("=== frontend/src/shared.jsx ===\n" + golden_files()["frontend/src/shared.jsx"], kept)

@@ -57,6 +57,6 @@ def describe_images(spec: Spec, req_dir: Path, llm, into: dict | None = None) ->
     def one(path: str) -> None:
         notes[path] = _describe(path, req_dir, llm)
 
-    with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_CALLS) as pool:
+    with ThreadPoolExecutor(max_workers=config.NOTES_PARALLEL_CALLS) as pool:
         list(pool.map(one, paths))
     return {p: notes[p] for p in paths}

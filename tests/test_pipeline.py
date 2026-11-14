@@ -36,9 +36,14 @@ GREEN, NOT_BOOTED, NOT_BUILT = report(), report(built=True, booted=False), repor
 
 
 def frontend_answer(marker=""):
+    """The page module answer (Task 10: the shell is its own call)."""
     files = golden_files()
-    main = files[MAIN] + (f"\n// {marker}\n" if marker else "")
-    return as_blocks({"frontend/src/shared.jsx": files["frontend/src/shared.jsx"], "frontend/src/App.jsx": files["frontend/src/App.jsx"], MAIN: main})
+    return as_blocks({MAIN: files[MAIN] + (f"\n// {marker}\n" if marker else "")})
+
+
+def shell_answer():
+    files = golden_files()
+    return as_blocks({k: files[k] for k in ("frontend/src/shared.jsx", "frontend/src/App.jsx")})
 
 
 def golden_llm(attempts=1, plan=None, frontends=None, repairs=4):
@@ -48,6 +53,7 @@ def golden_llm(attempts=1, plan=None, frontends=None, repairs=4):
         "tests:": [as_blocks({TESTS: files[TESTS]})],
         "plan": plan if plan is not None else [json.dumps(golden_plan())] * attempts,
         "backend": [as_blocks({"backend/app.js": files["backend/app.js"]})] * attempts,
+        "frontend:shell": [shell_answer()] * attempts,
         "frontend:m1": frontends or [frontend_answer()] * attempts,
         "repair:": ["no blocks"] * repairs,
     })

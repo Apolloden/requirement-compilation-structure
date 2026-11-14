@@ -216,14 +216,16 @@ class LLMTests(unittest.TestCase):
         u = Usage(); u.add("x", Completion("", "stop", input_tokens=1_000_000, cached_tokens=500_000, output_tokens=100_000))
         self.assertAlmostEqual(u.totals()["list_cny"], 0.91); self.assertAlmostEqual(u.totals()["billed_cny"], 1.82)
 
-    def test_at_most_four_requests_in_flight(self):
-        client = FakeClient([stream_chunks("x") for _ in range(8)], delay=0.05)
+    def test_at_most_eight_requests_in_flight(self):
+        # Task 10: backend and every module (at most 6 after Task 8) run at once; screenshot notes use at most 4.
+        self.assertEqual((config.MAX_PARALLEL_CALLS, config.NOTES_PARALLEL_CALLS), (8, 4))
+        client = FakeClient([stream_chunks("x") for _ in range(12)], delay=0.05)
         llm = LLM(client=client, sleep=lambda s: None)
-        threads = [threading.Thread(target=llm.complete, args=(f"c{i}", None, "u"), kwargs={"max_tokens": 5}) for i in range(8)]
+        threads = [threading.Thread(target=llm.complete, args=(f"c{i}", None, "u"), kwargs={"max_tokens": 5}) for i in range(12)]
         for t in threads: t.start()
         for t in threads: t.join()
-        self.assertLessEqual(client.max_in_flight, 4)
-        self.assertGreater(client.max_in_flight, 1)
+        self.assertLessEqual(client.max_in_flight, 8)
+        self.assertGreater(client.max_in_flight, 4)
 
     def test_calls_are_logged_without_the_key(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-secret-123"}):

@@ -27,7 +27,8 @@ class PipelineIntegrationTests(unittest.TestCase):
             "tests:": [as_blocks({"tests/scenarios-1.spec.ts": files["tests/scenarios-1.spec.ts"]})],
             "plan": [json.dumps(golden_plan())],
             "backend": [as_blocks({"backend/app.js": files["backend/app.js"]})],
-            "frontend:m1": [as_blocks({k: files[k] for k in ("frontend/src/shared.jsx", "frontend/src/App.jsx", "frontend/src/pages/m1.jsx")})],
+            "frontend:shell": [as_blocks({k: files[k] for k in ("frontend/src/shared.jsx", "frontend/src/App.jsx")})],
+            "frontend:m1": [as_blocks({"frontend/src/pages/m1.jsx": files["frontend/src/pages/m1.jsx"]})],
         })
         with contextlib.redirect_stdout(io.StringIO()) as printed:
             result = run(NOTES, out, llm=llm, tools=default_tools())

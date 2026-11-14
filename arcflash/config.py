@@ -4,7 +4,8 @@ MODEL = "deepseek-flash"
 THINKING = False
 TEMPERATURE = 0.2
 RESTART_TEMPERATURE = 0.6
-MAX_PARALLEL_CALLS = 4
+MAX_PARALLEL_CALLS = 8           # backend and every page module at once (Task 10; modules hold at most 6 pages)
+NOTES_PARALLEL_CALLS = 4         # screenshot notes, beside the plan: they leave slots free for it (Task 9)
 MAX_BACKGROUND_CALLS = 2     # the test writer's own slots: it never delays notes, plan, code or repairs
 MAX_TOKENS = {"vision": 800, "plan": 24000, "backend": 32000, "frontend": 32000, "tests": 16000, "repair": 8000,
               "quick_fix": 2000}

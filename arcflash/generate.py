@@ -73,13 +73,13 @@ def _ask(llm, purpose: str, system: str, user: str, expected: list[str], kind: s
 
 
 def generate_app(spec: Spec, notes_text: str, plan: dict, llm, *, temperature: float) -> tuple[dict[str, str], list[str]]:
-    """backend/app.js and the first module (with the shell) in parallel; further modules once the shell exists."""
+    """backend/app.js and the shell (shared.jsx, App.jsx) in parallel; once the shell exists, every page module at once,
+    each written against it (Task 10: no module waits for another module)."""
     modules = _modules(plan)
     if not modules:
         raise GenerationError("the plan has no modules")
     context = build_context(spec, notes_text, plan)
     system = load_prompt("rules")
-    first = modules[0]["id"]
 
     def ask(purpose, task, expected, kind):
         return _ask(llm, purpose, system, context + "\n\n" + task, expected, kind, temperature)
@@ -87,20 +87,19 @@ def generate_app(spec: Spec, notes_text: str, plan: dict, llm, *, temperature: f
     problems: list[str] = []
     with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_CALLS) as pool:
         backend = pool.submit(ask, "backend", load_prompt("backend"), [BACKEND], "backend")
-        shell_task = fill(load_prompt("frontend_first"), module=first, imports=module_imports(plan),
-                          components=components_text(plan, first))
-        shell = pool.submit(ask, f"frontend:{first}", shell_task, [SHARED, APP, module_key(first)], "frontend")
+        shell_task = fill(load_prompt("frontend_first"), imports=module_imports(plan))
+        shell = pool.submit(ask, "frontend:shell", shell_task, [SHARED, APP], "frontend")
         try:
             files = shell.result()
         except LLMError as e:
             raise GenerationError(f"the frontend shell call failed: {e}") from e
         if SHARED not in files or APP not in files:
             raise GenerationError("the frontend shell (shared.jsx and App.jsx) was not generated")
-        more = {}
-        for module in modules[1:]:
+        pending = {}
+        for module in modules:
             task = fill(load_prompt("frontend_more"), module=module["id"], components=components_text(plan, module["id"]),
                         shared=files[SHARED], app=files[APP])
-            more[module["id"]] = pool.submit(ask, f"frontend:{module['id']}", task, [module_key(module["id"])], "frontend")
+            pending[module["id"]] = pool.submit(ask, f"frontend:{module['id']}", task, [module_key(module["id"])], "frontend")
         try:
             backend_files = backend.result()
         except LLMError as e:
@@ -108,8 +107,8 @@ def generate_app(spec: Spec, notes_text: str, plan: dict, llm, *, temperature: f
         if BACKEND not in backend_files:
             raise GenerationError("backend/app.js was not generated")
         files.update(backend_files)
-        pages = {first: files.pop(module_key(first), None)}
-        for module_id, future in more.items():
+        pages = {}
+        for module_id, future in pending.items():
             try:
                 pages[module_id] = future.result().get(module_key(module_id))
             except LLMError:
