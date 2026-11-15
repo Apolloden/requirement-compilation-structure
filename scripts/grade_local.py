@@ -12,6 +12,7 @@ import argparse
 import json
 import re
 import shutil
+import socket
 import sys
 import tempfile
 from pathlib import Path
@@ -59,6 +60,12 @@ def main(argv=None) -> int:
     if not (app_dir / "deploy.sh").is_file() or not tests_dir.is_dir():
         print("need an app folder with deploy.sh and a tests folder", file=sys.stderr)
         return 2
+    # a server left on the port answers /api/health while deploy.sh still builds, and the tests then run against that
+    # other app (2026-11-15: a day-old server on 3451 turned a 13/14 Stack Overflow build into 0/14)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        if probe.connect_ex(("127.0.0.1", args.port)) == 0:
+            print(f"[grade] port {args.port} is already in use; stop that server or pick another --port", file=sys.stderr)
+            return 2
 
     work = Path(tempfile.mkdtemp(prefix="arcflash-grade-"))
     app, tests = work / "app", work / "tests"
