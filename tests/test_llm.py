@@ -89,6 +89,14 @@ class LLMTests(unittest.TestCase):
         self.assertTrue(is_runaway('{"notes": [' + ", ".join(str(i) for i in range(1, 2000))))
         self.assertTrue(is_runaway('{"app": {"notes": [\n' + "".join(f"    {i},\n" for i in range(1, 400))))
 
+    def test_one_endless_word_is_a_runaway(self):
+        # ArcLaser SO lane 2: a restart plan grew one JSON key of 19,044 word characters ("..._so_we_put_it_as_empty_string_
+        # here_...") and hit the 24k limit; in 787 recorded answers no other word reached 150 characters.
+        word = "layout_note_" + "but_we_cannot_edit_now_" * 40
+        self.assertTrue(is_runaway('{"pages": [], "' + word))
+        self.assertFalse(is_runaway('{"app": {"notes": ["' + "a minified plan, one line " * 400 + '"]}}'))
+        self.assertFalse(is_runaway("const id = '" + "a1b2c3d4" * 30 + "';\n"))
+
     def test_a_normal_list_of_numbers_is_not(self):
         self.assertFalse(is_runaway('{"ids": [' + ", ".join(str(i) for i in range(1, 60)) + "]}"))
         self.assertFalse(is_runaway('{"ids": [' + ", ".join(str(i) for i in range(1, 2000)) + '], "next": "x"'))
@@ -144,11 +152,23 @@ class LLMTests(unittest.TestCase):
 
     def test_a_call_without_usage_is_estimated_from_characters(self):
         # Review point 5: v3's longest calls (plan, frontend:main) had no usage record and counted as 0 tokens.
-        llm = self.make([cut_chunks("x" * 3600), stream_chunks("end")])
+        llm = self.make([cut_chunks("x " * 1800), stream_chunks("end")])
         llm.complete_long("plan", None, "u" * 7200, max_tokens=10)
         first = llm.usage.records()[0]
         self.assertEqual((first["input"], first["cached"], first["output"], first["estimated"]), (2000, 0, 1000, True))
         self.assertFalse(llm.usage.records()[1]["estimated"])
+
+    def test_a_stopped_call_counts_the_cache_hit_of_the_same_prompt_start(self):
+        # ArcLaser lanes: all 15 guard-stopped repair calls had no usage record and were booked fully uncached, while
+        # their neighbours with the same system prompt and context hit 80k to 133k cached tokens.
+        context = "C" * 72_000
+        llm = self.make([stream_chunks("ok", usage=(30_000, 20_000, 5)), cut_chunks("x" * 36), cut_chunks("y" * 36)])
+        llm.complete("repair:a1.1", "RULES", context + "task one", max_tokens=10)
+        llm.complete("repair:a1.2", "RULES", context + "task two", max_tokens=10)
+        llm.complete("other", "OTHER", context + "task three", max_tokens=10)
+        records = llm.usage.records()
+        self.assertEqual((records[1]["cached"], records[1]["estimated"]), (20_000, True))
+        self.assertEqual(records[2]["cached"], 0)   # another system prompt: nothing known about its cache
 
     def test_a_cut_answer_that_is_already_whole_is_not_continued(self):
         # Review point 7: a continuation of a whole JSON answer adds text, and json.loads then fails on "extra data".

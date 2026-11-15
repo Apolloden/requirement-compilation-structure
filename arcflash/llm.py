@@ -78,11 +78,17 @@ def _ends_in_number_run(text: str) -> bool:
     return False
 
 
+_WORD = re.compile(r"\w+", re.ASCII)
+
+
 def is_runaway(text: str) -> bool:
-    """True when the answer ends in a long blank stretch, the same non-empty line many times, or a long run of numbers."""
+    """True when the answer ends in a long blank stretch, the same non-empty line many times, a long run of numbers,
+    or one endless word."""
     if len(text) >= config.RUNAWAY_BLANK_CHARS and not text[-config.RUNAWAY_BLANK_CHARS:].strip():
         return True
     if _ends_in_number_run(text):
+        return True
+    if len(text) >= config.RUNAWAY_WORD_CHARS and _WORD.fullmatch(text[-config.RUNAWAY_WORD_CHARS:]):
         return True
     lines = text.split("\n")
     if lines and lines[-1] == "":
@@ -132,6 +138,7 @@ class LLM:
         self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(config.MAX_PARALLEL_CALLS)
         self._background_slots = threading.BoundedSemaphore(config.MAX_BACKGROUND_CALLS)
+        self._cache_hits: dict[str, int] = {}   # prompt start → cached tokens of the last call with a usage record
         self._count = 0
 
     # ---- public calls -------------------------------------------------------------------------
@@ -234,9 +241,22 @@ class LLM:
                 raise LLMError(f"{purpose}: gave up after {len(config.RETRY_WAITS)} waits: {error}") from error
             print(f"[arclaser] {purpose}: retry in {waits[0]} s after {type(error).__name__}: {str(error)[:120]}", flush=True)
             self.sleep(waits.pop(0))
+        self._book_cache(messages, completion)
         self.usage.add(purpose, completion)
         self._log(purpose, messages, completion, image_note)
         return completion
+
+    def _book_cache(self, messages, completion: Completion) -> None:
+        """A call without a usage record (stopped by the guard, cut, runaway) gets the cache hit of the last call that
+        began with the same system prompt and user text: the endpoint cached that prefix, we only lost its count."""
+        if any(not isinstance(m["content"], str) for m in messages[:2]):
+            return
+        key = "\x00".join(m["content"] for m in messages[:2])[:config.CACHE_KEY_CHARS]
+        with self._lock:
+            if not completion.estimated:
+                self._cache_hits[key] = completion.cached_tokens
+            elif key in self._cache_hits:
+                completion.cached_tokens = min(self._cache_hits[key], completion.input_tokens)
 
     def _stream(self, kwargs, stop_when=None) -> Completion:
         started = time.monotonic()

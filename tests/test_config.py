@@ -12,7 +12,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIs(config.THINKING, False)
 
     def test_limits(self):
-        self.assertEqual((config.MAX_REPAIR_ROUNDS, config.MAX_ATTEMPTS, config.MAX_PARALLEL_CALLS, config.FOCUS_GROUPS), (6, 2, 8, 3))
+        self.assertEqual((config.MAX_REPAIR_ROUNDS, config.MAX_ATTEMPTS, config.MAX_PARALLEL_CALLS, config.FOCUS_GROUPS), (8, 2, 8, 3))
         self.assertEqual(set(config.MAX_TOKENS), {"vision", "plan", "backend", "frontend", "tests", "repair", "quick_fix"})
         self.assertEqual(config.RETRY_WAITS, (15, 30, 60, 120))
         # Task 12: worst case 180 + a request in flight (20 min) + a check (about 25 min) = about 226 min

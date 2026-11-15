@@ -136,13 +136,14 @@ def _apply(llm, purpose: str, system: str, context: str, files: dict[str, str], 
 
 
 def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport,
-                check: Callable[[], CheckReport], budget, label: str, timeline=None) -> tuple[CheckReport, Path]:
+                check: Callable[[], CheckReport], budget, label: str, timeline=None, note: str = "") -> tuple[CheckReport, Path]:
     """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone. Returns the best report and snapshot.
-    A booted app needs budget kind "repair"; one that does not start needs only "rescue"."""
+    A booted app needs budget kind "repair"; one that does not start needs only "rescue". `note` opens the first round's
+    task (WORSE_NOTE when earlier rounds on this version gained nothing)."""
     system = load_prompt("rules")
     span = timeline.span if timeline is not None else (lambda phase: nullcontext())
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
-    note, without_gain, quick_tried = "", 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
+    without_gain, quick_tried = 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
     for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
         kind = "repair" if shows_pages(best) else "rescue"

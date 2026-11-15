@@ -135,6 +135,22 @@ class PipelineTests(unittest.TestCase):
         result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1), report(passed=0)]))
         self.assertTrue(result["shipped"]["source"].startswith("a1-"))
         self.assertIn("// first", (self.out / MAIN).read_text())
+        self.assertEqual(len(result["attempts"]), 2)   # the restart produced an app: no further repairs of attempt 1
+
+    def test_a_failed_restart_goes_back_to_repairing_the_best_version(self):
+        # ArcLaser SO lane 2: attempt 1 stopped at 20/66 after 17 minutes (two rounds without gain), the restart's plan
+        # was cut three times and then ran away, and the run shipped a1-r0 with 100 minutes unused.
+        line = golden_files()[MAIN].splitlines()[0]
+        fix = f"=== EDIT: {MAIN} ===\n<<<<<<< SEARCH\n{line}\n=======\n{line}\n// resumed\n>>>>>>> REPLACE\n=== END EDIT ===\n"
+        llm = golden_llm(plan=[json.dumps(golden_plan()), LLMError("connection error")], repairs=0)
+        llm.script["repair:"] = ["no blocks", "no blocks", fix]
+        result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1), GREEN]))
+        self.assertEqual(result["shipped"]["source"], "a1c-r1")
+        self.assertIn("// resumed", (self.out / MAIN).read_text())
+        self.assertEqual([a["attempt"] for a in result["attempts"]], [1, 2, "1c"])
+        self.assertEqual(result["attempts"][-1]["resumed_from"], "a1-r0")
+        resumed = [c for c in llm.calls if c["purpose"].startswith("repair:a1c")]
+        self.assertIn("previous fix made the results worse", resumed[0]["user"])   # it is told to try something else
 
     def test_template_is_shipped_when_nothing_builds(self):
         result = self.run_quiet(NOTES, self.out, llm=golden_llm(attempts=2), tools=tools(reports=[NOT_BUILT, NOT_BUILT]))

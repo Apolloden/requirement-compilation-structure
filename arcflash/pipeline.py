@@ -21,7 +21,7 @@ from arcflash.llm import LLM, LLMError, Usage
 from arcflash.plan import PlanError, make_plan
 from arcflash.proc import ProcResult
 from arcflash.prompting import build_context, notes_block
-from arcflash.repair import repair_loop
+from arcflash.repair import WORSE_NOTE, repair_loop
 from arcflash.spec import SpecError, load_spec
 from arcflash.vision import describe_images
 from arcflash.workspace import Workspace, WorkspaceError
@@ -252,6 +252,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
     budget = Budget(llm.usage, len(spec.scenarios), clock=clock)
     timeline = state["timeline"] = Timeline(clock, budget.started)
     versions: list[tuple[CheckReport, Path]] = state["versions"]
+    resumable: list[tuple] = []   # (report, snapshot, plan, context, harness_ok, attempt number) per finished attempt
     with ThreadPoolExecutor(max_workers=4) as pool:
         # 2-3. background installs, the independent tests and the screenshot notes; the plan does not wait for the notes
         install_future = pool.submit(tools.install_app, ws)
@@ -325,4 +326,20 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             budget.attempt_seconds = clock() - attempt_started
             attempt["rounds"] = _rounds(ws, f"a{n}")
             versions.append((best, snapshot))
+            resumable.append((best, snapshot, plan, context, harness_ok, n))
             _say(f"attempt {n}: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")
+
+        # 6b. a restart that ended before it had an app (plan cut or unusable, model down) would leave the rest of the
+        # time unused: repair the best version further instead, told that the earlier rounds on it gained nothing
+        if len(result["attempts"]) > 1 and result["attempts"][-1]["error"] and resumable and budget.allows("repair"):
+            report, snapshot, plan, context, harness_ok, n = max(resumable, key=lambda v: v[0].rank())
+            ws.restore(snapshot)
+            _say(f"the restart failed; repairing {snapshot.name} further")
+            attempt = {"attempt": f"{n}c", "resumed_from": snapshot.name, "plan_problems": [], "generation_problems": [],
+                       "error": None, "rounds": []}
+            result["attempts"].append(attempt)
+            best, snapshot = repair_loop(ws, context, plan, llm, report, lambda: tools.check(ws, plan, harness_ok), budget,
+                                         f"a{n}c", timeline=timeline, note=WORSE_NOTE)
+            attempt["rounds"] = _rounds(ws, f"a{n}c")
+            versions.append((best, snapshot))
+            _say(f"attempt {n}c: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")
