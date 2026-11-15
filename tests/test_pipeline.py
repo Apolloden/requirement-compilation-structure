@@ -152,6 +152,21 @@ class PipelineTests(unittest.TestCase):
         resumed = [c for c in llm.calls if c["purpose"].startswith("repair:a1c")]
         self.assertIn("previous fix made the results worse", resumed[0]["user"])   # it is told to try something else
 
+    def test_a_restart_refused_for_time_goes_back_to_repairing(self):
+        # ArcLaser 12306 lane: attempt 1 ended at 46/142 after 62 minutes (two rounds without gain); a restart needs as
+        # long as the first attempt took, so it was refused and 58 minutes went unused.
+        now = [0.0]
+        def jump(): now[0] = 70 * 60
+        line = golden_files()[MAIN].splitlines()[0]
+        fix = f"=== EDIT: {MAIN} ===\n<<<<<<< SEARCH\n{line}\n=======\n{line}\n// resumed\n>>>>>>> REPLACE\n=== END EDIT ===\n"
+        llm = golden_llm(repairs=0)
+        llm.script["repair:"] = ["no blocks", "no blocks", fix]
+        result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1), GREEN], on_check=jump),
+                                clock=lambda: now[0])
+        self.assertIn("restart", result["stop_reason"])
+        self.assertEqual([a["attempt"] for a in result["attempts"]], [1, "1c"])
+        self.assertEqual(result["shipped"]["source"], "a1c-r1")
+
     def test_template_is_shipped_when_nothing_builds(self):
         result = self.run_quiet(NOTES, self.out, llm=golden_llm(attempts=2), tools=tools(reports=[NOT_BUILT, NOT_BUILT]))
         self.assertEqual(result["shipped"]["source"], "template")

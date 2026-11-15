@@ -253,6 +253,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
     timeline = state["timeline"] = Timeline(clock, budget.started)
     versions: list[tuple[CheckReport, Path]] = state["versions"]
     resumable: list[tuple] = []   # (report, snapshot, plan, context, harness_ok, attempt number) per finished attempt
+    restart_refused = False
     with ThreadPoolExecutor(max_workers=4) as pool:
         # 2-3. background installs, the independent tests and the screenshot notes; the plan does not wait for the notes
         install_future = pool.submit(tools.install_app, ws)
@@ -274,6 +275,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
                 if not budget.allows("attempt"):
                     result["stop_reason"] = budget.stop_reason()
                     _say(f"no restart: {result['stop_reason']}")
+                    restart_refused = True
                     break
                 _say("restarting from the plan")
             attempt = {"attempt": n, "plan_problems": [], "generation_problems": [], "error": None, "rounds": []}
@@ -329,12 +331,14 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             resumable.append((best, snapshot, plan, context, harness_ok, n))
             _say(f"attempt {n}: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")
 
-        # 6b. a restart that ended before it had an app (plan cut or unusable, model down) would leave the rest of the
-        # time unused: repair the best version further instead, told that the earlier rounds on it gained nothing
-        if len(result["attempts"]) > 1 and result["attempts"][-1]["error"] and resumable and budget.allows("repair"):
+        # 6b. a restart refused for time, or one that ended before it had an app (plan cut or unusable, model down),
+        # would leave the rest of the time unused: repair the best version further instead, told that the earlier rounds
+        # on it gained nothing. Repairs need far less time than a restart (REPAIR_RESERVE_SECONDS).
+        restart_failed = len(result["attempts"]) > 1 and result["attempts"][-1]["error"]
+        if (restart_refused or restart_failed) and resumable and budget.allows("repair"):
             report, snapshot, plan, context, harness_ok, n = max(resumable, key=lambda v: v[0].rank())
             ws.restore(snapshot)
-            _say(f"the restart failed; repairing {snapshot.name} further")
+            _say(f"no app from a restart; repairing {snapshot.name} further")
             attempt = {"attempt": f"{n}c", "resumed_from": snapshot.name, "plan_problems": [], "generation_problems": [],
                        "error": None, "rounds": []}
             result["attempts"].append(attempt)
