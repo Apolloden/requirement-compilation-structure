@@ -28,8 +28,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-o", "--output", type=Path, default=ROOT.parent / f"arclaser-{date.today().isoformat()}.zip",
                         help="archive path (default: ../arclaser-<date>.zip)")
+    parser.add_argument("--force", action="store_true", help="overwrite an existing archive")
     args = parser.parse_args(argv)
     output = args.output.expanduser().resolve()
+    if output.exists() and not args.force:   # 2026-11-15: the v2 package silently replaced the graded ArcLaser ZIP
+        print(f"refusing to overwrite {output}: pass -o with a new name, or --force", file=sys.stderr)
+        return 1
     if output == ROOT or ROOT in output.parents:
         print(f"refusing to write {output}: the archive must not be inside the agent folder {ROOT}", file=sys.stderr)
         return 1
