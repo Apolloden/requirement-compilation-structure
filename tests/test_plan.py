@@ -302,6 +302,21 @@ class PlanTests(unittest.TestCase):
         upper, notes = self.settled(lambda p: p["pages"][0].update(id="Home"))
         self.assertEqual((upper["pages"][0]["id"], notes), ("home", []))
 
+    def test_a_layout_button_named_like_a_page_opens_that_page(self):
+        # ArcLaser Keep lane 2: sidebar buttons "Archived" and "Trash" had no "to"; the shell, written before the pages,
+        # made them switch a state no page read, so /archived and /trash could not be reached (7 of 33 scenarios).
+        def change(p):
+            p["layout"]["controls"] = [{"role": "button", "name": "Notes", "when": "always"},
+                                       {"role": "button", "name": "New note", "when": "always"},
+                                       {"role": "button", "name": "Log out", "when": "signed_in"}]
+            page(p, "notes")["controls"].append({"role": "button", "name": "Notes", "when": "after x"})
+        plan, _ = self.settled(change)
+        layout = {c["name"]: c.get("to") for c in plan["layout"]["controls"]}
+        # strict: the name equals the page id or its route words ("note_new", "notes new"); no guessing at word order
+        self.assertEqual(layout, {"Notes": "/notes", "New note": None, "Log out": None})
+        self.assertEqual([c["role"] for c in plan["layout"]["controls"]], ["button"] * 3)   # the stated role stays
+        self.assertNotIn("to", page(plan, "notes")["controls"][-1])   # a page's own control is never given a route
+
     def test_an_unknown_role_stays_with_a_note(self):
         plan, notes = self.settled(lambda p: page(p, "notes")["controls"].append({"role": "menu-item", "name": "Notes", "when": "after x"}))
         self.assertIn('page notes: role "menu-item" is not an ARIA role', notes)

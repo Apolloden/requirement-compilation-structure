@@ -259,6 +259,11 @@ def settle_modules(plan: dict) -> None:
         page["module"] = owner[page["id"]]
 
 
+def _words(text: str) -> str:
+    """"Account_security", "/account-security" and "Account security" all become "account security"."""
+    return " ".join(re.split(r"[\s/_-]+", text.lower())).strip()
+
+
 def settle_areas(plan: dict) -> list[str]:
     """Keep a control's "in" only when it names an area of the same page or of the layout (Task 6b); drop the rest,
     in place, and return a note for each."""
@@ -387,6 +392,20 @@ def settle_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
     if auth.get("accounts") is True and ("GET", "/api/session") not in seen_api:
         apis.append({"method": "GET", "path": "/api/session", "request": {}, "response": '{"user": null}', "errors": [], "reqs": []})
     plan["api"] = apis
+
+    # a layout button named like a page opens it: the shell is written before the pages and goes by "to" alone
+    # (ArcLaser Keep lane 2: "Archived" and "Trash" without "to" switched a state no page read)
+    by_name: dict[str, list[str]] = {}
+    for page in pages:
+        route = page.get("route")
+        if isinstance(route, str) and ":" not in route:
+            words = {_words(str(page.get("id", ""))), _words(route)}
+            for key in words - {""}:
+                by_name.setdefault(key, []).append(route)
+    for c in plan["layout"]["controls"]:
+        routes = sorted(set(by_name.get(_words(str(c.get("name", ""))), [])))
+        if c.get("role") == "button" and not c.get("to") and len(routes) == 1:
+            c["to"] = routes[0]
 
     settle_modules(plan)
     notes += settle_areas(plan)
