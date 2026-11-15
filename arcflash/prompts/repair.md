@@ -3,6 +3,7 @@ Task: the local check of the application found the problems below. Fix the cause
 - The requirement text is the authority. If a test contradicts it, correct the test (tests/scenarios-*.spec.ts) and quote the requirement sentence in a comment above the change. Otherwise change the application.
 - Fix the cause. Keep everything that works, the file structure and every export.
 - The problems are listed most important first: build, start, static check, page check, failure groups (largest first).
+- A STATIC CHECK line about seed records comes first: add every missing record to the seed of backend/app.js with the exact values of its Seed prerequisites line.
 - Write each SEARCH/REPLACE pair once. Stop when the groups shown in full are fixed.
 {{previous_note}}
 Edit with SEARCH/REPLACE blocks. SEARCH copies lines exactly from the current file, is as short as possible and matches one place only. One EDIT block may hold several pairs:

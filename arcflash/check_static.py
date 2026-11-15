@@ -124,6 +124,7 @@ ROLE_HELPERS = ("region", "navigation", "row", "listitem", "article", "group", "
                 "tab", "tabpanel", "menuitem")
 ARIA_LABEL = re.compile(r"(?<![\w-])aria-label\s*=\s*")
 TAG_START = re.compile(r"<([A-Za-z][\w.]*)")
+COMPONENT_LABEL = re.compile(r"(?<![\w-])(?:name|label|title|ariaLabel)\s*=\s*")
 EXPLICIT_ROLE = re.compile(r"(?<![\w-])role\s*=\s*(\{?)\s*([\"'`]?)([\w-]*)")
 HELPER_CALL = re.compile(rf"(?<![\w$.])({'|'.join(ROLE_HELPERS)})\(\s*[\w$.]+\s*,\s*")
 PLACEHOLDER = re.compile(r"(?<![\w-])placeholder\s*=\s*")
@@ -206,11 +207,18 @@ def _element_spans(src: str, name: str) -> list[tuple[int, int, int]]:
     """(start, end of the opening tag, end) of every plain element whose literal aria-label is the name, from its opening tag to the matching
     closing tag (nested tags of the same name counted). Components and computed labels are left out."""
     spans = []
-    for m in ARIA_LABEL.finditer(src):
+    labels = [(m, False) for m in ARIA_LABEL.finditer(src)] + [(m, True) for m in COMPONENT_LABEL.finditer(src)]
+    for m, component in sorted(labels, key=lambda x: x[0].start()):
         value = _attribute_value(src, m.end())
         starts = list(TAG_START.finditer(src, 0, m.start()))
-        if value is None or value.strip() != name.strip() or not starts or starts[-1].group(1) not in AREA_TAGS:
+        if value is None or value.strip() != name.strip() or not starts:
             continue
+        # a plain area tag with aria-label, or a component that takes the area's name (<Region name="Question feed">)
+        if not (starts[-1].group(1)[:1].isupper() if component else starts[-1].group(1) in AREA_TAGS):
+            continue
+        line_start = src.rfind("\n", 0, m.start()) + 1
+        if src[line_start:m.start()].lstrip().startswith(("//", "*", "/*")):
+            continue   # a usage example in a comment
         start, tag = starts[-1].start(), starts[-1].group(1)
         i = _tag_end(src, starts[-1].end())
         opened = i
@@ -300,6 +308,24 @@ def _component_at(src: str, pos: int) -> str | None:
     return found[-1] if found else None
 
 
+SEED_SHOWN = 30
+
+
+def seed_issues(files: dict[str, str], plan: dict) -> list[str]:
+    """One issue naming every seed value (email, username, number ... from the Seed prerequisites) that backend/app.js
+    does not contain literally. On the six graded ArcLaser builds it flags exactly Stack Overflow's 18 missing accounts."""
+    backend = files.get("backend/app.js")
+    values = [v for v in plan.get("seed_values", []) if isinstance(v, str)] if isinstance(plan.get("seed_values"), list) else []
+    if backend is None or not values:
+        return []
+    missing = [v for v in values if v not in backend]
+    if not missing:
+        return []
+    shown = ", ".join(f'"{v}"' for v in missing[:SEED_SHOWN]) + (f" and {len(missing) - SEED_SHOWN} more" if len(missing) > SEED_SHOWN else "")
+    return [f"backend/app.js seeds no record with {shown}; the scenarios' Seed prerequisites list them: seed every listed "
+            "record with its exact values (rule 12). Every scenario that signs in with a missing account fails."]
+
+
 def area_issues(files: dict[str, str], plan: dict) -> list[str]:
     """Rule 6b: a control planned "in" a named area must be rendered inside that area's element (evidence.md 6.2).
     Judged only in a file that renders both the area (a plain tag with a literal aria-label) and the control's name."""
@@ -323,6 +349,9 @@ def area_issues(files: dict[str, str], plan: dict) -> list[str]:
                 # an occurrence inside a component that the area renders (<Row /> in the span) counts as inside
                 used = {m.group(1) for a, _, b in spans for m in re.finditer(r"<([A-Z][\w]*)", src[a:b])}
                 inside = any(o <= p < b for p in places for _, o, b in spans) or any(_component_at(src, p) in used for p in places)
+                # a component area that gets the control as data in its props (<RadioGroup name="Gender" options={["Male"]} />)
+                inside = inside or any(src[a + 1:a + 2].isupper() and re.search(rf"([\"'`])\s*{n}\s*\1", src[a:o])
+                                       for a, o, _ in spans)
                 # a list the area builds from data (.map) with the name as a data value: not judged, like Task 11
                 inside = inside or (any(".map(" in src[o:b] for _, o, b in spans)
                                     and re.search(rf"(?<!=)(?<!=\{{)([\"'`]){n}\1", src) is not None)   # not an attribute
@@ -491,6 +520,9 @@ def static_issues(files: dict[str, str], plan: dict) -> list[str]:
                 issues.append(f'{key} repeats the layout {control["role"]} "{name}"; a screen shows it once unless the requirement '
                               'acts on it inside a named form or region: remove a repeat (a breadcrumb), or keep a form\'s own '
                               'control and hide the layout\'s one on that page (rule 5)')
+
+    # 8a2: every record the scenarios' Seed prerequisites name is seeded (ArcLaser SO: 18 of 24 accounts missing)
+    issues += seed_issues(files, plan)
 
     # 8b2: controls planned inside a named area are rendered inside it (Task 6b)
     issues += area_issues(files, plan)

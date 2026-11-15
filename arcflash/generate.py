@@ -86,7 +86,8 @@ def generate_app(spec: Spec, notes_text: str, plan: dict, llm, *, temperature: f
 
     problems: list[str] = []
     with ThreadPoolExecutor(max_workers=config.MAX_PARALLEL_CALLS) as pool:
-        backend = pool.submit(ask, "backend", load_prompt("backend"), [BACKEND], "backend")
+        seeds = "\n".join(f"- {line}" for line in spec.seed_lines) or "(the requirements list no seed records)"
+        backend = pool.submit(ask, "backend", fill(load_prompt("backend"), seeds=seeds), [BACKEND], "backend")
         shell_task = fill(load_prompt("frontend_first"), imports=module_imports(plan))
         shell = pool.submit(ask, "frontend:shell", shell_task, [SHARED, APP], "frontend")
         try:

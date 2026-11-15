@@ -283,6 +283,64 @@ def settle_areas(plan: dict) -> list[str]:
     return notes
 
 
+AREA_ROLES = frozenset({"region", "navigation", "form", "dialog", "complementary", "banner", "search", "group", "tablist",
+                        "toolbar", "menu", "list", "table"})
+
+
+ACTION_ROLES = frozenset({"button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "tab",
+                          "menuitem", "option", "spinbutton", "slider"})
+
+
+def infer_areas(plan: dict, spec: Spec) -> None:
+    """A control without "in" whose name the text writes as "<name> in <area>" ("Click Ask Question in Question feed",
+    "Activate Log in within Global navigation") gets that area, when the area is a control of its page or the layout and
+    the text names exactly one such area for it. In place (ArcLaser SO: the plan left Ask Question outside the feed)."""
+    owners = [_dicts(plan["layout"]["controls"])] + [_dicts(p.get("controls", [])) for p in _dicts(plan.get("pages", []))]
+    for controls in owners:   # a page control never sits in a layout area: the layout is written apart from the pages
+        areas = {str(x.get("name")) for x in controls if x.get("role") in AREA_ROLES and str(x.get("name", "")).strip()}
+        for c in controls:
+            name = str(c.get("name", "")).strip()
+            if "in" in c or not name or c.get("role") not in ACTION_ROLES:
+                continue
+            found = [a for a in areas if a != name and re.search(
+                rf"(?<![\w-]){re.escape(name)}(?:\s*\([a-z]+\))? (?:in|within|inside) (?:the )?{re.escape(a)}(?![\w-])", spec.corpus)]
+            if len(found) == 1:
+                c["in"] = found[0]
+
+
+def _camel(text: str) -> str:
+    return "".join(w[:1].upper() + w[1:] for w in re.findall(r"[A-Za-z0-9]+", text))
+
+
+def settle_shared_navs(plan: dict) -> None:
+    """A navigation planned on pages of two or more modules is written once, by the shell, as an exported component
+    (plan["shared_navs"]); the modules render it. ArcLaser 12306: three modules wrote their own "Personal center menu",
+    one without My Passengers, which broke every passenger and booking scenario."""
+    pages = [p for p in _dicts(plan.get("pages", [])) if isinstance(p.get("id"), str)]
+    holders: dict[str, list[dict]] = {}
+    for page in pages:
+        for c in _dicts(page.get("controls", [])):
+            if c.get("role") == "navigation" and str(c.get("name", "")).strip():
+                holders.setdefault(str(c["name"]), []).append(page)
+    shared = []
+    for name, owner_pages in holders.items():
+        if len({p.get("module") for p in owner_pages}) < 2:
+            continue
+        controls, seen = [], set()
+        for page in owner_pages:
+            for c in _dicts(page.get("controls", [])):
+                key = (c.get("role"), c.get("name"))
+                if c.get("in") == name and key not in seen:
+                    seen.add(key)
+                    controls.append({k: v for k, v in c.items() if k != "in"})
+        shared.append({"name": name, "component": "Nav" + _camel(name), "pages": [p["id"] for p in owner_pages],
+                       "controls": controls})
+    if shared:
+        plan["shared_navs"] = shared
+    else:
+        plan.pop("shared_navs", None)
+
+
 def _ancestors(spec: Spec, req: str) -> list[str]:
     chain, seen = [], set()
     parent = spec.requirements[req].parent if req in spec.requirements else None
@@ -407,8 +465,16 @@ def settle_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
         if c.get("role") == "button" and not c.get("to") and len(routes) == 1:
             c["to"] = routes[0]
 
+    # a button that opens another page is a link unless the requirements state the button role (ArcLaser Ctrip: the
+    # account menu's Orders as a button failed ~50 grader tests that v4's link passed; rules.md rule 2)
+    for c in plan["layout"]["controls"] + [c for p in pages for c in _dicts(p.get("controls", []))]:
+        if c.get("role") == "button" and c.get("to") and ("button", str(c.get("name", ""))) not in spec.role_names:
+            c["role"] = "link"
+
+    infer_areas(plan, spec)
     settle_modules(plan)
     notes += settle_areas(plan)
+    settle_shared_navs(plan)
 
     # a page control with a layout control's name: fine when the requirement scopes it, else the layout's one hides
     layout_pairs = set(_pairs(_dicts(plan["layout"]["controls"])))
@@ -451,6 +517,9 @@ def make_plan(spec: Spec, notes_text: str, llm, *, temperature: float) -> tuple[
             except Exception as e:   # a bug or odd output must cost this attempt at most, never the run (final review 1)
                 raise PlanError(f"settling the plan failed: {e!r}") from e
             if not _shape_problems(plan):
+                plan.pop("seed", None)   # the backend seeds from the requirement text (ArcLaser v2)
+                if spec.seed_values:
+                    plan["seed_values"] = spec.seed_values   # what the static check looks for in backend/app.js
                 if notes:
                     plan["plan_notes"] = notes
                 return plan, notes

@@ -18,25 +18,30 @@ RUNAWAY_REPEAT_LINES = 30
 RUNAWAY_NUMBER_RUN = 300     # an answer ending in this many comma-separated integers is counting, not planning
 RUNAWAY_WORD_CHARS = 400     # an answer ending in one word this long (letters, digits, _) has run away; real ones stay under 150
 CACHE_KEY_CHARS = 20_000     # a call without a usage record is booked with the cache hit of the last call that began the same way
-CONTINUE_PROMPT = "Continue exactly where your previous answer stopped. Output only the continuation, without repeating anything."
+CONTINUE_PROMPT = ("Your previous answer was cut off; it ends with the last complete line shown above. Continue with the next "
+                   "line: output only the rest of the answer, starting at the beginning of a new line, without repeating anything.")
+# A cut answer is continued from its last complete line: continued mid-string, the model dropped or repeated a few
+# characters at every seam (ArcLaser 12306: the plan failed to parse at the seam after 68 min). Only when that line
+# ends within this many characters of the cut; a one-line answer (minified JSON) is continued as it is.
+CONTINUE_LINE_CHARS = 4000
 RUNAWAY_PROMPT = "Your previous answer turned into blank or repeated text. Answer again, briefly and completely."
-MAX_REPAIR_ROUNDS = 8           # short aimed rounds (8k tokens, three failure groups each); Ctrip and SO still gained at round 6
+MAX_REPAIR_ROUNDS = 14          # short aimed rounds (8k tokens, three failure groups each); ArcLaser graded runs stopped at 37 to 118 of 180 min
 QUICK_FIX_LOG_LINES = 40         # a build or start failure: the log tail and this many lines on each side of a named line
 FOCUS_GROUPS = 3                # failure groups a repair round shows in full, largest first
-MAX_ROUNDS_WITHOUT_GAIN = 2
+MAX_ROUNDS_WITHOUT_GAIN = 3     # in a row; each such round sets its failure groups aside, the next aims at others
 MAX_ATTEMPTS = 2
 GOOD_ENOUGH_PASS_RATIO = 0.5
-MAX_RUN_SECONDS = 120 * 60       # no new repair round or restart after this (runtime is not scored; no platform limit known)
-RESCUE_UNTIL_SECONDS = 180 * 60  # an app that does not start still gets repair rounds until this
-# No new model request after this; one in flight finishes and the best version ships. Worst case about 226 min:
-# 180 + a request in flight (the endpoint ends every request by 1,201 s, 20 min) + a check (build 300 s, start 30 s,
+MAX_RUN_SECONDS = 180 * 60       # no new repair round or restart after this (runtime is not scored; runs of 370 and 615 min were accepted)
+RESCUE_UNTIL_SECONDS = 210 * 60  # an app that does not start still gets repair rounds until this
+# No new model request after this; one in flight finishes and the best version ships. Worst case about 266 min:
+# 220 + a request in flight (the endpoint ends every request by 1,201 s, 20 min) + a check (build 300 s, start 30 s,
 # browser 1,200 s; about 25 min). ArcLaser's repair answers are capped at 8k tokens, so rounds are short.
-HARD_STOP_SECONDS = 180 * 60
+HARD_STOP_SECONDS = 220 * 60
 REPAIR_RESERVE_SECONDS = 4 * 60
 NOTES_WAIT_SECONDS = 300         # code generation waits at most this long (from the notes' start) for screenshot notes
 ATTEMPT_RESERVE_SECONDS = 15 * 60
-MIN_RUN_COST_CNY = 2.0
-COST_PER_SCENARIO_CNY = 0.05
+MIN_RUN_COST_CNY = 3.0
+COST_PER_SCENARIO_CNY = 0.08     # cap only; ArcLaser spent a quarter of the leaders (score ÷ 1.07 per doubled cost)
 RESTART_COST_SHARE = 0.6
 PLATFORM_COST_FACTOR = 2.0
 CHARS_PER_TOKEN = 3.6         # measured on v3 Ctrip and PrestaShop calls (3.56 to 3.69); used only when a call has no usage

@@ -105,6 +105,14 @@ def strip_overlap(previous: str, continuation: str) -> str:
     return continuation
 
 
+def complete_lines(text: str) -> str:
+    """The text up to its last line break, when that is at most CONTINUE_LINE_CHARS before the end; else the text."""
+    if text.endswith("\n"):
+        return text
+    cut = text.rfind("\n")
+    return text[:cut + 1] if cut >= 0 and len(text) - cut <= config.CONTINUE_LINE_CHARS else text
+
+
 def _messages(system: str | None, user) -> list[dict]:
     return ([{"role": "system", "content": system}] if system is not None else []) + [{"role": "user", "content": user}]
 
@@ -169,11 +177,14 @@ class LLM:
                 result.finish_reason = "stop"
                 break
             n += 1
+            result.text = complete_lines(result.text)   # the cut partial line is dropped and written again whole
             more = messages + [{"role": "assistant", "content": result.text}, {"role": "user", "content": config.CONTINUE_PROMPT}]
             # A continuation is a fragment, never a JSON object of its own, so JSON mode stays off for it.
             part = self._request(f"{purpose}+{n}", more, max_tokens, False, temperature, background=background,
                                  stop_when=stop_when)
             part.text = strip_overlap(result.text, part.text)
+            if result.text.endswith("\n") and part.text.startswith("\n"):
+                part.text = part.text[1:]
             result = self._add(result, part)
         return result
 

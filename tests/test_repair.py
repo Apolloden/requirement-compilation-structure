@@ -87,11 +87,11 @@ class RepairTests(unittest.TestCase):
         self.assertIn("Your previous fix made the results worse and was undone", llm.calls[1]["user"])
         self.assertIn("Fixed notebook.", (self.ws.out / MAIN).read_text()); self.assertNotIn("Broken.", (self.ws.out / MAIN).read_text())
 
-    def test_two_rounds_without_gain_stop_the_loop(self):
+    def test_three_rounds_without_gain_stop_the_loop(self):
         e = edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Other.</p>")
-        llm = FakeLLM({"repair:": [e, e, e]})
-        best, snap = self.run_loop(llm, [report(1), report(0)])
-        self.assertEqual(len(llm.calls), 2)
+        llm = FakeLLM({"repair:": [e, e, e, e]})
+        best, snap = self.run_loop(llm, [report(1), report(0), report(1)])
+        self.assertEqual((len(llm.calls), config.MAX_ROUNDS_WITHOUT_GAIN), (3, 3))
         self.assertEqual(snap.name, "a1-r0"); self.assertEqual((self.ws.out / MAIN).read_text(), golden_files()[MAIN])
 
     def test_edits_that_do_not_apply_get_one_follow_up(self):
@@ -138,7 +138,7 @@ class RepairTests(unittest.TestCase):
     def test_a_start_failure_gets_a_quick_fix_around_the_backend_line(self):
         down = report(0, built=True, booted=False)
         down.boot_log = "Error: boom\n    at Object.<anonymous> (/work/backend/app.js:3:9)\n"
-        llm = FakeLLM({"quick_fix:": ["no blocks"], "repair:": ["no blocks"]})
+        llm = FakeLLM({"quick_fix:": ["no blocks"], "repair:": ["no blocks"] * 2})
         self.run_loop(llm, [], first=down)
         c = llm.calls[0]
         self.assertTrue(c["user"].startswith("CTX\n\nTask: the application builds but the server does not start."))
@@ -146,7 +146,7 @@ class RepairTests(unittest.TestCase):
 
     def test_a_build_log_without_a_line_gets_a_normal_round(self):
         broken = report(0, built=False, booted=False); broken.build_log = "something failed\n"
-        llm = FakeLLM({"repair:": ["no blocks", "no blocks"]})
+        llm = FakeLLM({"repair:": ["no blocks"] * 3})
         self.run_loop(llm, [], first=broken)
         self.assertEqual(llm.calls[0]["purpose"], "repair:a1.1")
 
@@ -157,18 +157,18 @@ class RepairTests(unittest.TestCase):
     def test_past_the_time_limit_only_an_app_that_does_not_start_is_repaired(self):
         # v3: every site reached its first check after the time limit, so no round ran; Ctrip shipped the template
         # because one missing export broke the build (docs/5-arcflash-v4/plan.md R2).
-        llm = FakeLLM({"repair:": ["no edits"] * 2})
+        llm = FakeLLM({"repair:": ["no edits"] * 3})
         self.run_loop(llm, [], budget={"rescue"}); self.assertEqual(llm.calls, [])
         self.run_loop(llm, [], budget={"rescue"}, first=report(0, built=False, booted=False))
-        self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2"])
+        self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2", "repair:a1.3"])
 
     def test_a_white_page_gets_a_rescue_round_too(self):
         # Review point 4: the backend answers /api/health, but the frontend crashes at render, so no page shows.
         white = report(0)
         white.smoke = [TestResult("smoke /", "smoke.spec.ts", "failed", error="Error: element not found")]
-        llm = FakeLLM({"repair:": ["no edits"] * 2})
+        llm = FakeLLM({"repair:": ["no edits"] * 3})
         self.run_loop(llm, [], budget={"rescue"}, first=white)
-        self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2"])
+        self.assertEqual([c["purpose"] for c in llm.calls], ["repair:a1.1", "repair:a1.2", "repair:a1.3"])
 
     def test_after_the_hard_stop_the_best_version_ships_without_a_request(self):
         from arcflash.llm import LLM
@@ -181,9 +181,21 @@ class RepairTests(unittest.TestCase):
         self.assertEqual((client.requests, snap.name, best.scenario_passed), ([], "a1-r0", 1))
 
     def test_an_answer_without_edits_is_a_round_without_gain(self):
-        llm = FakeLLM({"repair:": ["I cannot help.", "Still nothing."]})
+        llm = FakeLLM({"repair:": ["I cannot help.", "Still nothing.", "No."]})
         best, snap = self.run_loop(llm, [])
-        self.assertEqual((len(llm.calls), self.checks, snap.name), (2, 0, "a1-r0"))
+        self.assertEqual((len(llm.calls), self.checks, snap.name), (3, 0, "a1-r0"))
+
+    def test_a_round_without_gain_sets_its_groups_aside(self):
+        # ArcLaser v2: SO rounds 13, 14, 12, 14 all aimed at the same top groups; the loop stopped with 100 min unused.
+        from tests.test_check import grouped_report
+        e = edit(MAIN, "      <p>A small public notebook.</p>", "      <p>Other.</p>")
+        llm = FakeLLM({"repair:": [e, e]})
+        self.run_loop(llm, [grouped_report([4, 3, 2, 1, 1]), self.green], first=grouped_report([4, 3, 2, 1, 1]))
+        first, second = llm.calls[0]["user"], llm.calls[1]["user"]
+        self.assertIn("GROUP 1 (4 tests): Error: failure 0", first); self.assertNotIn("GROUP 1 (1 test)", first)
+        self.assertIn("GROUP 1 (1 test): Error: failure 3", second); self.assertIn("GROUP 2 (1 test): Error: failure 4", second)
+        self.assertIn("- (4 tests) Error: failure 0 | waiting for getByRole('button', { name: 'B0' }) [an earlier fix did not "
+                      "help; left for later]", second)
 
     def test_a_failed_repair_call_keeps_the_best(self):
         llm = FakeLLM({"repair:": [LLMError("busy")]})

@@ -143,7 +143,7 @@ class PipelineTests(unittest.TestCase):
         line = golden_files()[MAIN].splitlines()[0]
         fix = f"=== EDIT: {MAIN} ===\n<<<<<<< SEARCH\n{line}\n=======\n{line}\n// resumed\n>>>>>>> REPLACE\n=== END EDIT ===\n"
         llm = golden_llm(plan=[json.dumps(golden_plan()), LLMError("connection error")], repairs=0)
-        llm.script["repair:"] = ["no blocks", "no blocks", fix]
+        llm.script["repair:"] = ["no blocks"] * config.MAX_ROUNDS_WITHOUT_GAIN + [fix]
         result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1), GREEN]))
         self.assertEqual(result["shipped"]["source"], "a1c-r1")
         self.assertIn("// resumed", (self.out / MAIN).read_text())
@@ -156,11 +156,11 @@ class PipelineTests(unittest.TestCase):
         # ArcLaser 12306 lane: attempt 1 ended at 46/142 after 62 minutes (two rounds without gain); a restart needs as
         # long as the first attempt took, so it was refused and 58 minutes went unused.
         now = [0.0]
-        def jump(): now[0] = 70 * 60
+        def jump(): now[0] = 120 * 60   # a restart needs 120 more minutes; the limit is 180
         line = golden_files()[MAIN].splitlines()[0]
         fix = f"=== EDIT: {MAIN} ===\n<<<<<<< SEARCH\n{line}\n=======\n{line}\n// resumed\n>>>>>>> REPLACE\n=== END EDIT ===\n"
         llm = golden_llm(repairs=0)
-        llm.script["repair:"] = ["no blocks", "no blocks", fix]
+        llm.script["repair:"] = ["no blocks"] * config.MAX_ROUNDS_WITHOUT_GAIN + [fix]
         result = self.run_quiet(NOTES, self.out, llm=llm, tools=tools(reports=[report(passed=1), GREEN], on_check=jump),
                                 clock=lambda: now[0])
         self.assertIn("restart", result["stop_reason"])
@@ -190,7 +190,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result["shipped"]["source"], "template"); self.assertTrue((self.out / "deploy.sh").exists())
 
     def test_budget_cap_scales_with_scenarios(self):
-        self.assertEqual(Budget(Usage(), 12).cap_cny, 2.0); self.assertAlmostEqual(Budget(Usage(), 142).cap_cny, 7.1)
+        self.assertEqual(Budget(Usage(), 12).cap_cny, 3.0); self.assertAlmostEqual(Budget(Usage(), 142).cap_cny, 11.36)
 
     def test_budget_rules(self):
         now = [0.0]
@@ -205,7 +205,7 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(b.allows("rescue"))
         now[0] = 0.0
         from arcflash.llm import Completion
-        usage.add("x", Completion("", "stop", output_tokens=160_000))   # list ¥0.64, billed ¥1.28 ≥ 60% of ¥2
+        usage.add("x", Completion("", "stop", output_tokens=240_000))   # list ¥0.96, billed ¥1.92 ≥ 60% of ¥3
         self.assertTrue(b.allows("repair")); self.assertFalse(b.allows("attempt")); self.assertIn("cost", b.stop_reason())
         usage.add("y", Completion("", "stop", output_tokens=200_000))
         self.assertFalse(b.allows("rescue"))           # the cost cap holds for a rescue too
@@ -220,7 +220,7 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(b.allows("attempt")); self.assertIn("restart", b.stop_reason())
 
     def test_limits(self):
-        self.assertEqual((config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (120 * 60, 180 * 60))
+        self.assertEqual((config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (180 * 60, 210 * 60))
 
     def test_good_enough(self):
         self.assertTrue(good_enough(report(passed=2))); self.assertFalse(good_enough(report(passed=1)))

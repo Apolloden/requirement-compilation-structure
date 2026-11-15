@@ -59,7 +59,7 @@ class LLMTests(unittest.TestCase):
         def broken():
             yield from stream_chunks("line one\nline two", finish=None, pieces=1)[:1]
             raise connection_error()   # an idle read timeout or "peer closed connection" mid-answer
-        llm = self.make([broken(), stream_chunks("\nline three")])
+        llm = self.make([broken(), stream_chunks("line two\nline three")])   # the cut line is written again whole
         c = llm.complete_long("plan", None, "u", max_tokens=10)
         self.assertEqual((c.text, c.finish_reason, self.sleeps), ("line one\nline two\nline three", "stop", []))
         self.assertEqual([r["finish"] for r in llm.usage.records()], ["cut", "stop"])
@@ -111,7 +111,7 @@ class LLMTests(unittest.TestCase):
         c = llm.complete_long("plan", "S", "U", max_tokens=10)
         self.assertEqual(c.text, "line one\nline two is long\nline three")
         messages = self.client.requests[1]["messages"]
-        self.assertEqual(messages[-2], {"role": "assistant", "content": "line one\nline two is long"})
+        self.assertEqual(messages[-2], {"role": "assistant", "content": "line one\n"})   # continued from the last whole line
         self.assertEqual(messages[-1], {"role": "user", "content": config.CONTINUE_PROMPT})
         self.assertEqual([r["purpose"] for r in llm.usage.records()], ["plan", "plan+1"])
         self.assertEqual(c.input_tokens, 200)
@@ -119,7 +119,7 @@ class LLMTests(unittest.TestCase):
     def test_answer_cut_by_the_connection_is_continued(self):
         # v3 Ctrip: plan and frontend:main streams ended after 1,100 to 1,200 s with no finish reason and no usage;
         # the half answer was used as if complete (docs/5-arcflash-v4/plan.md R3).
-        llm = self.make([cut_chunks("line one\nline two"), stream_chunks("\nline three")])
+        llm = self.make([cut_chunks("line one\nline two"), stream_chunks("line two\nline three")])
         c = llm.complete_long("plan", "S", "U", max_tokens=10)
         self.assertEqual((c.text, c.finish_reason), ("line one\nline two\nline three", "stop"))
         self.assertEqual([r["purpose"] for r in llm.usage.records()], ["plan", "plan+1"])

@@ -254,6 +254,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
     versions: list[tuple[CheckReport, Path]] = state["versions"]
     resumable: list[tuple] = []   # (report, snapshot, plan, context, harness_ok, attempt number) per finished attempt
     restart_refused = False
+    enough = False   # the best version passes GOOD_ENOUGH_PASS_RATIO: no restart, but repairs go on
     with ThreadPoolExecutor(max_workers=4) as pool:
         # 2-3. background installs, the independent tests and the screenshot notes; the plan does not wait for the notes
         install_future = pool.submit(tools.install_app, ws)
@@ -271,6 +272,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
         for n in range(1, config.MAX_ATTEMPTS + 1):
             if n > 1:
                 if versions and good_enough(versions[0][0]):
+                    enough = True
                     break
                 if not budget.allows("attempt"):
                     result["stop_reason"] = budget.stop_reason()
@@ -335,10 +337,12 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
         # would leave the rest of the time unused: repair the best version further instead, told that the earlier rounds
         # on it gained nothing. Repairs need far less time than a restart (REPAIR_RESERVE_SECONDS).
         restart_failed = len(result["attempts"]) > 1 and result["attempts"][-1]["error"]
-        if (restart_refused or restart_failed) and resumable and budget.allows("repair"):
-            report, snapshot, plan, context, harness_ok, n = max(resumable, key=lambda v: v[0].rank())
+        best_resumable = max(resumable, key=lambda v: v[0].rank()) if resumable else None
+        if ((restart_refused or restart_failed or enough) and best_resumable and not best_resumable[0].all_green()
+                and budget.allows("repair")):
+            report, snapshot, plan, context, harness_ok, n = best_resumable
             ws.restore(snapshot)
-            _say(f"no app from a restart; repairing {snapshot.name} further")
+            _say(f"no restart; repairing {snapshot.name} further")
             attempt = {"attempt": f"{n}c", "resumed_from": snapshot.name, "plan_problems": [], "generation_problems": [],
                        "error": None, "rounds": []}
             result["attempts"].append(attempt)

@@ -70,6 +70,11 @@ def _test_code(test: TestResult, test_files: dict[str, str]) -> str:
     return f"Test code ({test.file}, lines {start} to {end}):\n{numbered}"
 
 
+def _shown(groups: list[list[TestResult]], skip) -> list[list[TestResult]]:
+    fresh = [g for g in groups if _group_key(g[0].error) not in skip]
+    return (fresh or groups)[:config.FOCUS_GROUPS]
+
+
 @dataclass
 class CheckReport:
     static_issues: list[str]
@@ -111,12 +116,22 @@ class CheckReport:
                 groups.setdefault(_group_key(t.error), []).append(t)
         return sorted(groups.values(), key=len, reverse=True)
 
-    def focus_tests(self) -> list[TestResult]:
-        """The failing tests of the FOCUS_GROUPS biggest groups: what a repair round aims at."""
-        return [t for group in self.failure_groups()[:config.FOCUS_GROUPS] for t in group]
+    def shown_groups(self, skip=frozenset()) -> list[list[TestResult]]:
+        """The FOCUS_GROUPS biggest groups whose key is not in `skip` (groups a round already tried without gain);
+        when every group was tried, the biggest ones again."""
+        return _shown(self.failure_groups(), skip)
 
-    def _scenario_section(self, test_files: dict[str, str], layout_areas=()) -> str:
+    def shown_keys(self, skip=frozenset()) -> set[tuple[str, str]]:
+        return {_group_key(g[0].error) for g in self.shown_groups(skip)}
+
+    def focus_tests(self, skip=frozenset()) -> list[TestResult]:
+        """The failing tests of the groups a repair round aims at."""
+        return [t for group in self.shown_groups(skip) for t in group]
+
+    def _scenario_section(self, test_files: dict[str, str], layout_areas=(), skip=frozenset()) -> str:
         groups = self.failure_groups()
+        shown = _shown(groups, skip)
+        rest = [g for g in groups if all(g is not s for s in shown)]
         head = f"SCENARIO TESTS: {self.scenario_passed} of {self.scenario_total} passed."
         if groups:
             head += f" {len(groups)} failure group{'' if len(groups) == 1 else 's'}, largest first; fix the groups shown in full."
@@ -124,7 +139,7 @@ class CheckReport:
         if self.load_errors:
             lines.append("Test files that could not load:")
             lines += [f"- {e}" for e in self.load_errors]
-        for n, tests in enumerate(groups[:config.FOCUS_GROUPS], 1):
+        for n, tests in enumerate(shown, 1):
             t = tests[0]
             lines.append(f"GROUP {n} ({_plural(len(tests))}): {_group_line(_group_key(t.error))}")
             lines.append(f"FAILED: {t.title} ({t.file})")
@@ -143,13 +158,14 @@ class CheckReport:
                 others = [o.title for o in tests[1:]]
                 more = f" (and {len(others) - TITLES_PER_GROUP} more)" if len(others) > TITLES_PER_GROUP else ""
                 lines.append("Same first error in: " + ", ".join(others[:TITLES_PER_GROUP]) + more)
-        if len(groups) > config.FOCUS_GROUPS:
+        if rest:
             lines.append("OTHER FAILURE GROUPS (one line each):")
-            lines += [f"- ({_plural(len(g))}) {_group_line(_group_key(g[0].error))}" for g in groups[config.FOCUS_GROUPS:]]
+            lines += [f"- ({_plural(len(g))}) {_group_line(_group_key(g[0].error))}"
+                      + (" [an earlier fix did not help; left for later]" if _group_key(g[0].error) in skip else "") for g in rest]
         return "\n".join(lines)
 
     def to_prompt(self, max_chars: int = config.REPORT_CHARS, test_files: dict[str, str] | None = None,
-                  layout_areas=()) -> str:
+                  layout_areas=(), skip=frozenset()) -> str:
         """The problem text of Appendix B.4, most important first, cut at max_chars. `test_files` (file name → source)
         adds the lines around each shown group's failing test line; `layout_areas` are the layout's named areas."""
         sections = []
@@ -164,7 +180,7 @@ class CheckReport:
             sections.append("PAGE CHECK (each planned page opened directly):\n" + "\n".join(
                 f"- {t.title}: " + "\n  ".join(t.error.splitlines()[:3]) for t in failed_smoke))
         if self.browser_checked and (self.scenarios or self.load_errors):
-            sections.append(self._scenario_section(test_files or {}, layout_areas))
+            sections.append(self._scenario_section(test_files or {}, layout_areas, skip))
         if self.server_log.strip():
             sections.append(f"SERVER LOG (last {SERVER_LOG_LINES} lines):\n" + proc.tail(self.server_log, SERVER_LOG_LINES))
         text = "\n\n".join(sections)

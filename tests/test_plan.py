@@ -314,7 +314,8 @@ class PlanTests(unittest.TestCase):
         layout = {c["name"]: c.get("to") for c in plan["layout"]["controls"]}
         # strict: the name equals the page id or its route words ("note_new", "notes new"); no guessing at word order
         self.assertEqual(layout, {"Notes": "/notes", "New note": None, "Log out": None})
-        self.assertEqual([c["role"] for c in plan["layout"]["controls"]], ["button"] * 3)   # the stated role stays
+        # ArcLaser v2: a button that opens a page is a link unless the text writes "Notes"(role=button) (Ctrip Orders)
+        self.assertEqual([c["role"] for c in plan["layout"]["controls"]], ["link", "button", "button"])
         self.assertNotIn("to", page(plan, "notes")["controls"][-1])   # a page's own control is never given a route
 
     def test_an_unknown_role_stays_with_a_note(self):

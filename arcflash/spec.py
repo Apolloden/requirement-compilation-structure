@@ -10,6 +10,11 @@ import yaml
 NOTE_CHARS = 20_000
 ROLE_NAME = re.compile(r'["“]([^"”\n]{1,120})["”]\s*\(role=([a-z]+)\)')
 REF = re.compile(r"\\ref\[([a-z]+)\]\(([^)]*)\)")
+# "Seed prerequisites (prepared before this scenario):" followed by "- what: {json}" lines, in the scenarios' steps
+SEED_HEAD = "Seed prerequisites"
+SEED_VALUE = re.compile(r'"(\w+)":\s*"([^"\\]{5,})"')
+# values that identify a seeded record and that a backend writes literally (ArcLaser SO: 18 of 24 accounts missing)
+SEED_KEYS = frozenset({"email", "username", "mobile", "phone", "number", "order_number", "sku"})
 
 
 @dataclass
@@ -66,6 +71,8 @@ class Spec:
     role_names: list[tuple[str, str]]          # (role, name) from "Name"(role=x), no names containing "{"
     corpus: str                                # every text in the document, for exact-name lookups
     digest: str                                # Appendix B.1
+    seed_lines: list[str] = field(default_factory=list)    # every distinct "Seed prerequisites" line, in file order
+    seed_values: list[str] = field(default_factory=list)   # emails, usernames, numbers ... named in those lines
 
 
 class SpecError(ValueError):
@@ -187,6 +194,30 @@ def _render_requirement(req: Requirement) -> str:
     return "\n".join(lines + _render_scenarios(req))
 
 
+def seed_lines(scenarios: list[Scenario]) -> list[str]:
+    """The distinct "- ..." lines under each "Seed prerequisites" head in the steps, in file order, without the dash."""
+    lines = []
+    for sc in scenarios:
+        for st in sc.steps:
+            for text in (st.given, st.when, st.then):
+                rows = text.split("\n")
+                for i, row in enumerate(rows):
+                    if SEED_HEAD not in row:
+                        continue
+                    for nxt in rows[i + 1:]:
+                        if not nxt.strip().startswith("- "):
+                            break
+                        lines.append(nxt.strip()[2:].strip())
+    return list(dict.fromkeys(lines))
+
+
+def seed_values(lines: list[str]) -> list[str]:
+    """Identifying values a seeded record must carry literally: an email (any value with @), a username, a mobile or
+    phone, a number, an order number or a sku."""
+    values = [v for line in lines for key, v in SEED_VALUE.findall(line) if key.lower() in SEED_KEYS or "@" in v]
+    return list(dict.fromkeys(values))
+
+
 def load_spec(folder: Path) -> Spec:
     folder = Path(folder)
     path = folder / "requirements.yaml"
@@ -224,6 +255,7 @@ def load_spec(folder: Path) -> Spec:
     blocks += [_render_requirement(r) for rid, r in requirements.items() if rid != root_id or r.is_leaf]
     digest = "\n\n".join(blocks) + "\n"
 
+    seeds = seed_lines(scenarios)
     return Spec(title=root.name, text=root.text, requirements=requirements, leaves=leaves, scenarios=scenarios,
                 images=list(reader.images.values()), assets=assets, notes=notes, role_names=role_names,
-                corpus=corpus, digest=digest)
+                corpus=corpus, digest=digest, seed_lines=seeds, seed_values=seed_values(seeds))

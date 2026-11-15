@@ -49,7 +49,7 @@ def _named_modules(app: dict[str, str], plan: dict, report: CheckReport) -> set[
     return keys & set(app)
 
 
-def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict[str, str]:
+def repair_files(files: dict[str, str], plan: dict, report: CheckReport, skip=frozenset()) -> dict[str, str]:
     """The files a round needs. A running app: the shell, the page modules the FOCUS_GROUPS biggest failure groups ran
     on, modules named in static issues, and the groups' test files (Task 4). An app that does not build or start: every
     app file when they fit, otherwise the shell and the named modules."""
@@ -61,7 +61,7 @@ def repair_files(files: dict[str, str], plan: dict, report: CheckReport) -> dict
         else:
             keys = set(SHELL) | _named_modules(app, plan, report) | named_tests
         return {k: files[k] for k in files if k in keys}
-    focus = report.focus_tests()
+    focus = report.focus_tests(skip)
     tests = ({f"tests/{t.file}" for t in focus} & set(files)) | named_tests
     paths = [urlparse(t.url).path or "/" for t in focus if t.url]
     paths += [t.title.removeprefix("smoke ") for t in report.smoke if t.status != "passed"]
@@ -137,13 +137,16 @@ def _apply(llm, purpose: str, system: str, context: str, files: dict[str, str], 
 
 def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport,
                 check: Callable[[], CheckReport], budget, label: str, timeline=None, note: str = "") -> tuple[CheckReport, Path]:
-    """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone. Returns the best report and snapshot.
+    """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone, and the failure groups it aimed at are set
+    aside, so the next round aims at the next biggest groups (ArcLaser v2: rounds kept retrying one stuck group and the
+    loop stopped after two). Returns the best report and snapshot.
     A booted app needs budget kind "repair"; one that does not start needs only "rescue". `note` opens the first round's
     task (WORSE_NOTE when earlier rounds on this version gained nothing)."""
     system = load_prompt("rules")
     span = timeline.span if timeline is not None else (lambda phase: nullcontext())
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
     without_gain, quick_tried = 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
+    tried: set = set()   # failure groups a round aimed at without gain
     for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
         kind = "repair" if shows_pages(best) else "rescue"
@@ -156,8 +159,9 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         else:
             purpose, tokens = f"repair:{label}.{n}", config.MAX_TOKENS["repair"]
             tests = {k.removeprefix("tests/"): v for k, v in files.items() if k.startswith("tests/")}
-            task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best)),
-                        problems=best.to_prompt(test_files=tests, layout_areas=_layout_areas(plan)))
+            task = fill(load_prompt("repair"), previous_note=note, files=render_files(repair_files(files, plan, best, tried)),
+                        problems=best.to_prompt(test_files=tests, layout_areas=_layout_areas(plan), skip=tried))
+        aimed = best.shown_keys(tried) if quick is None else set()
         try:
             with span(f"{purpose.split(':')[0].replace('_', ' ')} {label}.{n}"):
                 answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
@@ -167,6 +171,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
             break
         if new == files:   # nothing applied: the check would repeat the last result
             without_gain += 1
+            tried |= aimed
             continue
         ws.write({k: v for k, v in new.items() if files.get(k) != v})
         with span(f"check {label}-r{n}"):
@@ -177,4 +182,5 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         else:
             ws.restore(best_snapshot)
             note, without_gain = WORSE_NOTE, without_gain + 1
+            tried |= aimed
     return best, best_snapshot

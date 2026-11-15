@@ -9,7 +9,7 @@ import yaml
 from arcflash import config
 from arcflash.generate import GenerationError, components_text, generate_app, module_imports, stub_module, write_tests
 from arcflash.llm import LLMError
-from arcflash.prompting import build_context, load_prompt
+from arcflash.prompting import build_context, fill, load_prompt
 from arcflash.spec import load_spec
 from tests.fakes import FakeLLM, as_blocks
 from tests.golden import golden_files, golden_plan
@@ -87,7 +87,8 @@ class GenerateTests(unittest.TestCase):
         prefix = build_context(self.spec, "", golden_plan())
         for c in llm.calls:
             self.assertTrue(c["user"].startswith(prefix + "\n\n")); self.assertEqual(c["system"], load_prompt("rules"))
-        self.assertEqual(call(llm, "backend")["user"], prefix + "\n\n" + load_prompt("backend"))
+        seeds = "\n".join(f"- {line}" for line in self.spec.seed_lines) or "(the requirements list no seed records)"
+        self.assertEqual(call(llm, "backend")["user"], prefix + "\n\n" + fill(load_prompt("backend"), seeds=seeds))
 
     def test_extra_files_in_an_answer_are_ignored(self):
         llm = answers(backend=[pick("backend/app.js", **{"frontend/src/pages/m1.jsx": "x\n"})])

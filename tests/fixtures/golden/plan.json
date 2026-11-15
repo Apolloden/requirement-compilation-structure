@@ -2,7 +2,6 @@
  "app": {"title": "Notes", "notes": ["Dates use UTC and the shared clock 2026-01-01T09:00:00Z."]},
  "auth": {"accounts": false},
  "tables": [{"name": "notes", "columns": ["id INTEGER PRIMARY KEY AUTOINCREMENT", "title TEXT NOT NULL", "body TEXT NOT NULL DEFAULT ''", "created_at TEXT NOT NULL"]}],
- "seed": [],
  "api": [
   {"method": "GET", "path": "/api/notes", "request": {}, "response": "{\"notes\": [{\"id\": 1, \"title\": \"...\"}]}", "errors": [], "reqs": ["REQ-1.1"]},
   {"method": "POST", "path": "/api/notes", "request": {"title": "string", "body": "string"}, "response": "{\"note\": {\"id\": 1, \"title\": \"...\", \"body\": \"...\"}}", "errors": ["400 {\"error\": \"Title is required\"}"], "reqs": ["REQ-1.2"]},
