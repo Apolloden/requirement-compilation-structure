@@ -41,7 +41,9 @@ MAX_ROUNDS_WITHOUT_GAIN = 3     # in a row; each such round sets its failure gro
 # The final repairs (until the budget) end after this many rounds in a row without gain. At about 410 passed tests and
 # ¥15, ¥1 weighs as much as 2.4 tests in the score (dS/S = 1.1 dN/N - 0.1 dC/C). ArcLaser v3 graded Ctrip gained after
 # at most 2 rounds without gain; the ArcZenith BookStack lane sat at 32/35 for 14 final rounds (one test it ran cannot pass).
-MAX_FINAL_ROUNDS_WITHOUT_GAIN = 6
+# The ArcZenith Stack Overflow lane gained 38 -> 40 -> 44 after 8 final rounds without gain (6 would have shipped 38);
+# Ctrip and PrestaShop found nothing after their best, so 10 keeps every late gain seen and still ends a stuck loop.
+MAX_FINAL_ROUNDS_WITHOUT_GAIN = 10
 MAX_ATTEMPTS = 2
 GOOD_ENOUGH_PASS_RATIO = 0.5
 MAX_RUN_SECONDS = 200 * 60       # no new repair round or restart after this (runtime is not scored; runs of 370 and 615 min were accepted)
