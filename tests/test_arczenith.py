@@ -224,7 +224,16 @@ class ArcZenithTests(unittest.TestCase):
         llm = FakeLLM({"repair:": ["no edits"] * 5})
         repair_loop(self.workspace(), "CTX", golden_plan(), llm, failing, lambda: failing,
                     mock.Mock(allows=lambda k: next(allowed)), "a1c", final=True)
-        self.assertEqual(len(llm.calls), 5)   # not 3: rounds without gain do not end the final repairs
+        self.assertEqual(len(llm.calls), 5)   # not 3: three rounds without gain do not end the final repairs
+
+    def test_the_final_repairs_end_after_six_rounds_in_a_row_without_gain(self):
+        # BookStack lane: 14 final rounds at 32/35; ¥1 weighs as much as about 2.4 tests in the score
+        failing = self.report(1)
+        llm = FakeLLM({"repair:": ["no edits"] * 20})
+        repair_loop(self.workspace(), "CTX", golden_plan(), llm, failing, lambda: failing, mock.Mock(allows=lambda k: True),
+                    "a1c", final=True)
+        self.assertEqual(len(llm.calls), config.MAX_FINAL_ROUNDS_WITHOUT_GAIN)
+        self.assertEqual(config.MAX_FINAL_ROUNDS_WITHOUT_GAIN, 6)
 
     # ---- failure groups and message lookups --------------------------------------------------------------------------
 

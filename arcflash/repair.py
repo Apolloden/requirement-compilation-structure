@@ -190,8 +190,8 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
     loop stopped after two). Returns the best report and snapshot.
     A booted app needs budget kind "repair"; one that does not start needs only "rescue". `note` opens the first round's
     task (WORSE_NOTE when earlier rounds on this version gained nothing).
-    `final`: the last repairs of the run. Rounds without gain do not stop it; the time and cost budget, MAX_FINAL_ROUNDS
-    and success do. When every failure group has been tried, the rotation starts again from the biggest (ArcLaser v3
+    `final`: the last repairs of the run. It stops at the time or cost budget, MAX_FINAL_ROUNDS, success, or after
+    MAX_FINAL_ROUNDS_WITHOUT_GAIN rounds in a row without gain (not 3). When every failure group has been tried, the rotation starts again from the biggest (ArcLaser v3
     graded: Ctrip's continued repairs went 83 → 129 own tests and 123 graded, against v2's 81). It never runs on a check
     that ran no scenario (ArcLaser v3 12306: 25 blind rounds on 0 of 0).
     Every loop ends when all scenarios pass, static issues or not."""
@@ -204,7 +204,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
     for n in range(1, rounds + 1):
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
         kind = "repair" if shows_pages(best) else "rescue"
-        stalled = without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN and not final
+        stalled = without_gain >= (config.MAX_FINAL_ROUNDS_WITHOUT_GAIN if final else config.MAX_ROUNDS_WITHOUT_GAIN)
         blind = final and best.booted and best.scenario_total == 0   # no browser, or no test ran: nothing to aim at
         if best.all_green() or scenarios_done(best) or stalled or blind or not budget.allows(kind):
             break

@@ -34,6 +34,10 @@ MAX_REPAIR_ROUNDS = 14          # short aimed rounds (8k tokens, three failure g
 QUICK_FIX_LOG_LINES = 40         # a build or start failure: the log tail and this many lines on each side of a named line
 FOCUS_GROUPS = 3                # failure groups a repair round shows in full, largest first
 MAX_ROUNDS_WITHOUT_GAIN = 3     # in a row; each such round sets its failure groups aside, the next aims at others
+# The final repairs (until the budget) end after this many rounds in a row without gain. At about 410 passed tests and
+# ¥15, ¥1 weighs as much as 2.4 tests in the score (dS/S = 1.1 dN/N - 0.1 dC/C). ArcLaser v3 graded Ctrip gained after
+# at most 2 rounds without gain; the ArcZenith BookStack lane sat at 32/35 for 14 final rounds (one test it ran cannot pass).
+MAX_FINAL_ROUNDS_WITHOUT_GAIN = 6
 MAX_ATTEMPTS = 2
 GOOD_ENOUGH_PASS_RATIO = 0.5
 MAX_RUN_SECONDS = 200 * 60       # no new repair round or restart after this (runtime is not scored; runs of 370 and 615 min were accepted)
