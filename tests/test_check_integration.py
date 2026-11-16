@@ -59,7 +59,7 @@ class CheckIntegrationTests(unittest.TestCase):
     def test_frontend_syntax_error_fails_the_build(self):
         self.variant(MAIN, "export function PageHome() {", "export function PageHome() {{")
         r = run_check(self.ws, golden_plan(), harness_ok=True)
-        self.assertFalse(r.built); self.assertIn("main.jsx", r.build_log); self.assertEqual(r.scenarios, [])
+        self.assertFalse(r.built); self.assertIn(Path(MAIN).name, r.build_log); self.assertEqual(r.scenarios, [])   # the log names the broken module
 
     def test_backend_crash_fails_the_start(self):
         self.variant("backend/app.js", "export function registerApi(app, db) {",

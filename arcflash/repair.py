@@ -205,7 +205,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
         kind = "repair" if shows_pages(best) else "rescue"
         stalled = without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN and not final
-        blind = final and best.browser_checked and best.scenario_total == 0
+        blind = final and best.booted and best.scenario_total == 0   # no browser, or no test ran: nothing to aim at
         if best.all_green() or scenarios_done(best) or stalled or blind or not budget.allows(kind):
             break
         if tried and not best.shown_keys(tried) - tried:   # every group was tried: start the rotation again

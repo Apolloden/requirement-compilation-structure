@@ -180,10 +180,10 @@ def load_errors_of(harness: Path, names: list[str], *, timeout: float = 120) -> 
                    env=proc.local_env({}))
     start = run.output.find("{")
     try:
-        data = json.loads(run.output[start:]) if start >= 0 else {}
+        data = json.JSONDecoder().raw_decode(run.output[start:])[0] if start >= 0 else {}
     except ValueError:
         return [] if run.returncode == 0 else [proc.tail(run.output, 20)]
-    return parse_report(data)[1]
+    return parse_report(data)[1] if isinstance(data, dict) else []
 
 
 def _run_report(harness: Path, report: Path, args: list[str], timeout: float, env: dict) -> tuple[list[TestResult], list[str], str]:
