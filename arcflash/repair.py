@@ -222,8 +222,9 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         aimed = best.shown_keys(tried) if quick is None else set()
         try:
             with span(f"{purpose.split(':')[0].replace('_', ' ')} {label}.{n}"):
+                temperature = config.TEMPERATURE if without_gain == 0 else config.RETRY_TEMPERATURE   # a new idea, not the same fix
                 answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
-                                           stop_when=RepeatGuard(), continue_cut=False)
+                                           temperature=temperature, stop_when=RepeatGuard(), continue_cut=False)
                 new = _apply(llm, purpose, system, context, files, answer.text)
         except LLMError:
             break

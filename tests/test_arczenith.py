@@ -235,6 +235,15 @@ class ArcZenithTests(unittest.TestCase):
         self.assertEqual(len(llm.calls), config.MAX_FINAL_ROUNDS_WITHOUT_GAIN)
         self.assertEqual(config.MAX_FINAL_ROUNDS_WITHOUT_GAIN, 6)
 
+    # BookStack lane: 4 of 10 repair answers were byte-identical to earlier failed ones (same prompt, temperature 0.2)
+    def test_a_round_after_a_round_without_gain_samples_more_freely(self):
+        failing = self.report(1)
+        allowed = iter([True] * 3 + [False] * 5)
+        llm = FakeLLM({"repair:": ["no edits"] * 3})
+        repair_loop(self.workspace(), "CTX", golden_plan(), llm, failing, lambda: failing,
+                    mock.Mock(allows=lambda k: next(allowed)), "a1c", final=True)
+        self.assertEqual([c["temperature"] for c in llm.calls], [config.TEMPERATURE, 0.7, 0.7])
+
     # ---- failure groups and message lookups --------------------------------------------------------------------------
 
     # 12306 (v2 graded): the booking step's failure was split into seven groups by the passenger names in its locator.

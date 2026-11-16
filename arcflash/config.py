@@ -4,6 +4,9 @@ MODEL = "deepseek-flash"
 THINKING = False
 TEMPERATURE = 0.2
 RESTART_TEMPERATURE = 0.6
+# A repair round after a round without gain: at 0.2 the model answered the same prompt with the same failed fix
+# (ArcZenith BookStack lane: 4 of 10 repair answers byte-identical to earlier ones, three groups stuck for 9 rounds).
+RETRY_TEMPERATURE = 0.7
 MAX_PARALLEL_CALLS = 8           # backend and every page module at once (Task 10; modules hold at most 6 pages)
 NOTES_PARALLEL_CALLS = 4         # screenshot notes, beside the plan: they leave slots free for it (Task 9)
 MAX_BACKGROUND_CALLS = 2     # the test writer's own slots: it never delays notes, plan, code or repairs
