@@ -54,7 +54,9 @@ class PromptTests(unittest.TestCase):
         # docs/6-arclaser/evidence.md 6.4: the grader scoped "Click Log in inside that form" (Stack Overflow) but not
         # "click the Sign in submit button" (PrestaShop), which failed on two buttons of the same name.
         tests = load_prompt("tests")
-        self.assertIn("Scope a lookup to a named form, region or dialog exactly when the step acts inside it", tests)
+        # ArcLaser v3 PrestaShop: "Open Addresses from Account overview" was scoped by the grader as well
+        self.assertIn("Scope a lookup to a named form, region, navigation or dialog exactly when the step acts inside it", tests)
+        self.assertIn('"from X"', tests)
         self.assertIn("otherwise look it up in the whole page, as the grader does", tests)
 
     def test_a_control_can_be_placed_inside_an_area(self):
@@ -67,7 +69,7 @@ class PromptTests(unittest.TestCase):
         # evidence.md C1: with only region() available, our tests looked up a navigation landmark as a region, like the code.
         helpers = (AGENT_ROOT / "arcflash" / "template" / "harness" / "tests" / "helpers.ts").read_text(encoding="utf-8")
         for export in ("export const navigation", "export const row", "export const listitem", "export const article",
-                       "export const group", "export const status", "export const searchbox", "export const spinbutton",
+                       "export const group", "export function status(", "export const searchbox", "export const spinbutton",
                        "export const tab ", "export const tabpanel", "export const menuitem", "export function role(",
                        "export function placeholder("):
             self.assertIn(export, helpers)

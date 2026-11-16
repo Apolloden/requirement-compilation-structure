@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from arcflash import config
 from arcflash.blocks import RepeatGuard, apply_edits, parse_edits, render_files
 from arcflash.check import CheckReport
+from arcflash.harness import load_errors_of, unloadable_files
 from arcflash.llm import LLMError
 from arcflash.prompting import fill, load_prompt
 from arcflash.workspace import Workspace
@@ -135,23 +136,80 @@ def _apply(llm, purpose: str, system: str, context: str, files: dict[str, str], 
     return new
 
 
+LOAD_PLACE = re.compile(r"\((\d+):\d+\)|:(\d+):\d+\b")
+
+
+def fix_unloadable_tests(ws: Workspace, llm, load_errors: list[str], label: str) -> dict[str, str]:
+    """A generated test file that does not load gets small fix calls (the quick-fix prompt, 2k tokens) with
+    Playwright's error and the lines it names, until it loads, at most TEST_FIX_TRIES per file. Returns the files it
+    changed. A file that still does not load stays left out of the checks (run_playwright skips it). ArcLaser v3 12306:
+    a duplicate const in one file stopped every check at 0 of 0; the repair rounds could not edit test files."""
+    system = load_prompt("rules")
+    files, changed = ws.read_generated(), {}
+    for name in unloadable_files(load_errors):
+        key = f"tests/{name}"
+        errors = [e for e in load_errors if name in (e.splitlines() or [""])[0]]
+        for attempt in range(1, config.TEST_FIX_TRIES + 1):
+            if key not in files or not errors:
+                break
+            place = LOAD_PLACE.search(errors[0])
+            line = int(place.group(1) or place.group(2)) if place else 1
+            lines = files[key].splitlines()
+            n = config.QUICK_FIX_LOG_LINES
+            start, end = max(1, line - n), min(len(lines), line + n)
+            code = f"=== {key}, lines {start} to {end} ===\n" + "".join(f"{k:4d} | {lines[k - 1]}\n" for k in range(start, end + 1))
+            task = fill(load_prompt("quick_fix"), what=f"the test file {key} does not load (Playwright cannot parse it), "
+                        "so none of its tests run. Keep every test; change only what makes the file invalid.",
+                        log=proc_tail(errors[0], n), code=code.rstrip("\n"))
+            try:
+                answer = llm.complete_long(f"quick_fix:tests.{label}.{name}.{attempt}", system, task,
+                                           max_tokens=config.MAX_TOKENS["quick_fix"], stop_when=RepeatGuard(), continue_cut=False)
+            except LLMError:
+                break
+            new, _ = apply_edits({key: files[key]}, parse_edits(answer.text))
+            if new[key] == files[key]:
+                continue
+            files[key] = changed[key] = new[key]
+            ws.write({key: new[key]})
+            errors = load_errors_of(ws.harness, [name])
+    return changed
+
+
+def scenarios_done(report: CheckReport) -> bool:
+    """Every scenario and page check passes (static issues aside): nothing left that our tests can see. ArcLaser v3
+    Keep: 13 more rounds after 33/33, aimed at one static issue, cost ¥3.76 against v2's ¥0.62 for the same result."""
+    return (report.booted and report.scenario_total > 0 and report.scenario_passed == report.scenario_total
+            and report.smoke_passed == len(report.smoke))
+
+
 def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport,
-                check: Callable[[], CheckReport], budget, label: str, timeline=None, note: str = "") -> tuple[CheckReport, Path]:
+                check: Callable[[], CheckReport], budget, label: str, timeline=None, note: str = "",
+                final: bool = False) -> tuple[CheckReport, Path]:
     """Up to MAX_REPAIR_ROUNDS rounds; a round that is not better is undone, and the failure groups it aimed at are set
     aside, so the next round aims at the next biggest groups (ArcLaser v2: rounds kept retrying one stuck group and the
     loop stopped after two). Returns the best report and snapshot.
     A booted app needs budget kind "repair"; one that does not start needs only "rescue". `note` opens the first round's
-    task (WORSE_NOTE when earlier rounds on this version gained nothing)."""
+    task (WORSE_NOTE when earlier rounds on this version gained nothing).
+    `final`: the last repairs of the run. Rounds without gain do not stop it; the time and cost budget, MAX_FINAL_ROUNDS
+    and success do. When every failure group has been tried, the rotation starts again from the biggest (ArcLaser v3
+    graded: Ctrip's continued repairs went 83 → 129 own tests and 123 graded, against v2's 81). It never runs on a check
+    that ran no scenario (ArcLaser v3 12306: 25 blind rounds on 0 of 0).
+    Every loop ends when all scenarios pass, static issues or not."""
     system = load_prompt("rules")
     span = timeline.span if timeline is not None else (lambda phase: nullcontext())
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
     without_gain, quick_tried = 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
     tried: set = set()   # failure groups a round aimed at without gain
-    for n in range(1, config.MAX_REPAIR_ROUNDS + 1):
+    rounds = config.MAX_FINAL_ROUNDS if final else config.MAX_REPAIR_ROUNDS
+    for n in range(1, rounds + 1):
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
         kind = "repair" if shows_pages(best) else "rescue"
-        if best.all_green() or without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN or not budget.allows(kind):
+        stalled = without_gain >= config.MAX_ROUNDS_WITHOUT_GAIN and not final
+        blind = final and best.browser_checked and best.scenario_total == 0
+        if best.all_green() or scenarios_done(best) or stalled or blind or not budget.allows(kind):
             break
+        if tried and not best.shown_keys(tried) - tried:   # every group was tried: start the rotation again
+            tried = set()
         files = ws.read_generated()
         quick = None if quick_tried else quick_fix_task(files, best)
         if quick is not None:   # a build or start error with a named line: a 2k-token fix, not a full round (E6)

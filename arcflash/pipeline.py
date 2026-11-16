@@ -1,4 +1,4 @@
-"""The ArcLaser flow: read → tests and screenshot notes in the background, plan at once → code (with the notes) →
+"""The ArcZenith flow (ArcLaser v2 plus the fixes of docs/9-arczenith): read → tests and screenshot notes in the background, plan at once → code (with the notes) →
 check → repair → restart once → ship."""
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from typing import Callable
 from arcflash import config
 from arcflash.check import CheckReport, run_check
 from arcflash.generate import GenerationError, generate_app, write_tests
-from arcflash.harness import HarnessStatus, prepare_harness
+from arcflash.harness import HarnessStatus, prepare_harness, unloadable_files, write_named
 from arcflash.llm import LLM, LLMError, Usage
 from arcflash.plan import PlanError, make_plan
 from arcflash.proc import ProcResult
 from arcflash.prompting import build_context, notes_block
-from arcflash.repair import WORSE_NOTE, repair_loop
+from arcflash.repair import WORSE_NOTE, fix_unloadable_tests, repair_loop, scenarios_done
 from arcflash.spec import SpecError, load_spec
 from arcflash.vision import describe_images
 from arcflash.workspace import Workspace, WorkspaceError
@@ -145,7 +145,7 @@ def good_enough(report: CheckReport) -> bool:
 
 
 def _say(text: str) -> None:
-    print(f"[arclaser] {text}", flush=True)
+    print(f"[arczenith] {text}", flush=True)
 
 
 def _safe_result(future, fallback):
@@ -176,7 +176,7 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
     req_dir, out_dir = Path(req_dir), Path(out_dir)
     started = clock()
     tools = tools or default_tools()
-    result = {"agent": "arclaser", "started_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": 0,
+    result = {"agent": "arczenith", "started_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": 0,
               "input": {"requirements": 0, "leaves": 0, "scenarios": 0, "images": 0, "assets": 0},
               "usage": Usage().totals(), "calls": [], "harness_ok": False, "test_problems": [], "attempts": [],
               "shipped": _shipped("template", None), "stop_reason": None, "errors": []}
@@ -197,6 +197,7 @@ def run(req_dir: Path, out_dir: Path, *, llm=None, tools: Tools | None = None, c
         return result
     if spec is not None:
         ws.save_text("digest.txt", spec.digest)
+        write_named(ws.harness, spec.role_names)   # the names our status and alert lookups use
         result["input"] = {"requirements": len(spec.requirements), "leaves": len(spec.leaves),
                            "scenarios": len(spec.scenarios), "images": len(spec.images), "assets": len(spec.assets)}
         _say(f"read {len(spec.leaves)} leaf requirements, {len(spec.scenarios)} scenarios, {len(spec.images)} screenshots")
@@ -253,8 +254,6 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
     timeline = state["timeline"] = Timeline(clock, budget.started)
     versions: list[tuple[CheckReport, Path]] = state["versions"]
     resumable: list[tuple] = []   # (report, snapshot, plan, context, harness_ok, attempt number) per finished attempt
-    restart_refused = False
-    enough = False   # the best version passes GOOD_ENOUGH_PASS_RATIO: no restart, but repairs go on
     with ThreadPoolExecutor(max_workers=4) as pool:
         # 2-3. background installs, the independent tests and the screenshot notes; the plan does not wait for the notes
         install_future = pool.submit(tools.install_app, ws)
@@ -271,13 +270,11 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
         # 4-6. attempts
         for n in range(1, config.MAX_ATTEMPTS + 1):
             if n > 1:
-                if versions and good_enough(versions[0][0]):
-                    enough = True
+                if versions and good_enough(versions[0][0]):   # no restart; the repairs in 6b go on
                     break
                 if not budget.allows("attempt"):
                     result["stop_reason"] = budget.stop_reason()
                     _say(f"no restart: {result['stop_reason']}")
-                    restart_refused = True
                     break
                 _say("restarting from the plan")
             attempt = {"attempt": n, "plan_problems": [], "generation_problems": [], "error": None, "rounds": []}
@@ -324,6 +321,16 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             _say(f"attempt {n}: check")
             with timeline.span(f"check a{n}-r0"):
                 first = tools.check(ws, plan, harness_ok)
+            if harness_ok and unloadable_files(first.load_errors):
+                # a test file that does not load: small fix calls, then the check again (ArcLaser v3 12306: 0 of 0)
+                with timeline.span(f"test fix a{n}"):
+                    fixed = fix_unloadable_tests(ws, llm, first.load_errors, f"a{n}")
+                tests.update(fixed)   # a restart writes the fixed tests
+                result["test_problems"].append(f"attempt {n}: test files that did not load: "
+                                               f"{', '.join(unloadable_files(first.load_errors))}; fixed: {', '.join(fixed) or 'none'}")
+                if fixed:
+                    with timeline.span(f"check a{n}-r0b"):
+                        first = tools.check(ws, plan, harness_ok)
             context = build_context(spec, notes_text, plan)
             best, snapshot = repair_loop(ws, context, plan, llm, first, lambda: tools.check(ws, plan, harness_ok), budget, f"a{n}",
                                          timeline=timeline)
@@ -333,12 +340,12 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
             resumable.append((best, snapshot, plan, context, harness_ok, n))
             _say(f"attempt {n}: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")
 
-        # 6b. a restart refused for time, or one that ended before it had an app (plan cut or unusable, model down),
-        # would leave the rest of the time unused: repair the best version further instead, told that the earlier rounds
-        # on it gained nothing. Repairs need far less time than a restart (REPAIR_RESERVE_SECONDS).
-        restart_failed = len(result["attempts"]) > 1 and result["attempts"][-1]["error"]
+        # 6b. whatever ended the attempts (rounds without gain, a restart refused for time or that failed, a good-enough
+        # first attempt), the rest of the time goes to repairing the best version, told that the earlier rounds on it
+        # gained nothing; it stops when every scenario passes. ArcLaser v2 graded: Ctrip ended at 107 of 180 min with
+        # nothing using the rest; ArcLaser v3 graded: the continued repairs took Ctrip from 83 to 129 own tests.
         best_resumable = max(resumable, key=lambda v: v[0].rank()) if resumable else None
-        if ((restart_refused or restart_failed or enough) and best_resumable and not best_resumable[0].all_green()
+        if (best_resumable and not best_resumable[0].all_green() and not scenarios_done(best_resumable[0])
                 and budget.allows("repair")):
             report, snapshot, plan, context, harness_ok, n = best_resumable
             ws.restore(snapshot)
@@ -347,7 +354,7 @@ def _flow(spec, req_dir: Path, ws: Workspace, llm, tools: Tools, clock, result: 
                        "error": None, "rounds": []}
             result["attempts"].append(attempt)
             best, snapshot = repair_loop(ws, context, plan, llm, report, lambda: tools.check(ws, plan, harness_ok), budget,
-                                         f"a{n}c", timeline=timeline, note=WORSE_NOTE)
+                                         f"a{n}c", timeline=timeline, note=WORSE_NOTE, final=True)
             attempt["rounds"] = _rounds(ws, f"a{n}c")
             versions.append((best, snapshot))
             _say(f"attempt {n}c: best {snapshot.name}, scenarios {best.scenario_passed}/{best.scenario_total}")

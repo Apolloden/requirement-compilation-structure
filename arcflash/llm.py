@@ -250,7 +250,7 @@ class LLM:
                 error = e
             if not waits:
                 raise LLMError(f"{purpose}: gave up after {len(config.RETRY_WAITS)} waits: {error}") from error
-            print(f"[arclaser] {purpose}: retry in {waits[0]} s after {type(error).__name__}: {str(error)[:120]}", flush=True)
+            print(f"[arczenith] {purpose}: retry in {waits[0]} s after {type(error).__name__}: {str(error)[:120]}", flush=True)
             self.sleep(waits.pop(0))
         self._book_cache(messages, completion)
         self.usage.add(purpose, completion)

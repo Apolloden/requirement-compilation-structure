@@ -9,6 +9,61 @@ import yaml
 
 NOTE_CHARS = 20_000
 ROLE_NAME = re.compile(r'["“]([^"”\n]{1,120})["”]\s*\(role=([a-z]+)\)')
+# Areas and statuses declared in words instead of "Name"(role=x): "Account overview is a named region", "Breadcrumb
+# and Subcategories are named regions", "Product count is a named status", "The selected-train information is a named
+# region Train Information". ArcLaser v3 PrestaShop: the plan left out Account overview, the links the scenarios open
+# "from Account overview" were rendered outside it, and 29 of 31 signed-in grader tests timed out (41/86, v2 61).
+PROSE_ROLE = re.compile(r"\b(?:is|are) (?:a |the )?(?:separate |distinct )?named (region|status|navigation)s?\b")
+PROSE_NAME_AFTER = re.compile(r" ([A-Z][\w-]*(?: [A-Z][\w-]*){0,4})(?![\w-])")
+PROSE_SPLIT = re.compile(r",\s*(?:and\s+)?|\s+and\s+")
+PROSE_LEAD = re.compile(r"^.*\b[a-z][\w-]* (?=[A-Z])")   # "checkout steps Personal Information" → "Personal Information"
+PROSE_STOP = frozenset({"The", "A", "An", "Each", "Every", "This", "These", "That", "Its", "Their", "Both", "All", "Any",
+                        "Then", "When", "Given", "And"})
+PROSE_BOUNDARY = re.compile(r"[.;:(\n](?=[^.;:(\n]*$)")
+PROSE_SENTENCE_END = re.compile(r"[.;](?:\s|$)|\n")
+
+
+def prose_role_names(corpus: str) -> list[tuple[str, str]]:
+    """(role, name) pairs from sentences that declare named regions, navigations or statuses in words. A name must start
+    with a capital letter, have at most five words, not start with an article, and occur in the text outside the
+    sentences that declare it (which drops a trailing descriptor such as "... and Edit traveler forms")."""
+    found: list[tuple[str, str, int, int]] = []   # role, name, sentence start, sentence end
+    for m in PROSE_ROLE.finditer(corpus):
+        role = m.group(1)
+        start = 0
+        boundary = PROSE_BOUNDARY.search(corpus, max(0, m.start() - 400), m.start())
+        if boundary:
+            start = boundary.end()
+        else:
+            start = max(0, m.start() - 400)
+        stop = PROSE_SENTENCE_END.search(corpus, m.end())
+        end = stop.start() if stop else len(corpus)
+        after = PROSE_NAME_AFTER.match(corpus, m.end())
+        if after and m.group(0).startswith("is"):   # "is a named region Train Information"
+            names = [after.group(1)]
+        else:
+            names = [PROSE_LEAD.sub("", item.strip(" ,")) for item in PROSE_SPLIT.split(corpus[start:m.start()].strip())]
+        for name in names:
+            words = name.split()
+            if (not name or not name[0].isupper() or len(words) > 5 or words[0] in PROSE_STOP
+                    or any(ch in name for ch in '{}"“”()[]')):
+                continue
+            found.append((role, name, start, end))
+    if not found:
+        return []
+    declaring = sorted({(s, e) for _, _, s, e in found})
+    rest, last = [], 0
+    for s, e in declaring:
+        if s >= last:
+            rest.append(corpus[last:s])
+            last = e
+    rest.append(corpus[last:])
+    elsewhere = "\n".join(rest)
+    pairs: list[tuple[str, str]] = []
+    for role, name, _, _ in found:
+        if (role, name) not in pairs and re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", elsewhere):
+            pairs.append((role, name))
+    return pairs
 REF = re.compile(r"\\ref\[([a-z]+)\]\(([^)]*)\)")
 # "Seed prerequisites (prepared before this scenario):" followed by "- what: {json}" lines, in the scenarios' steps
 SEED_HEAD = "Seed prerequisites"
@@ -244,6 +299,11 @@ def load_spec(folder: Path) -> Spec:
     for name, role in ROLE_NAME.findall(corpus):
         if "{" not in name and (role, name) not in role_names:
             role_names.append((role, name))
+    stated = {name for _, name in role_names}
+    for role, name in prose_role_names(corpus):   # a name the text already states with a role keeps that role only
+        if name not in stated:
+            role_names.append((role, name))
+            stated.add(name)
 
     root_scenarios = [] if root.is_leaf else _render_scenarios(root)   # a root leaf is rendered under REQUIREMENTS
     blocks = ["\n".join([f"APPLICATION: {root.name}"] + ([root.text] if root.text else []) + root_scenarios)]

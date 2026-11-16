@@ -293,8 +293,9 @@ ACTION_ROLES = frozenset({"button", "link", "textbox", "searchbox", "combobox", 
 
 def infer_areas(plan: dict, spec: Spec) -> None:
     """A control without "in" whose name the text writes as "<name> in <area>" ("Click Ask Question in Question feed",
-    "Activate Log in within Global navigation") gets that area, when the area is a control of its page or the layout and
-    the text names exactly one such area for it. In place (ArcLaser SO: the plan left Ask Question outside the feed)."""
+    "Activate Log in within Global navigation", "Open Addresses from Account overview") gets that area, when the area is
+    a control of its page or the layout and the text names exactly one such area for it. In place (ArcLaser SO: the plan
+    left Ask Question outside the feed; ArcLaser v3 PrestaShop: the account links outside Account overview, 41/86)."""
     owners = [_dicts(plan["layout"]["controls"])] + [_dicts(p.get("controls", [])) for p in _dicts(plan.get("pages", []))]
     for controls in owners:   # a page control never sits in a layout area: the layout is written apart from the pages
         areas = {str(x.get("name")) for x in controls if x.get("role") in AREA_ROLES and str(x.get("name", "")).strip()}
@@ -303,7 +304,7 @@ def infer_areas(plan: dict, spec: Spec) -> None:
             if "in" in c or not name or c.get("role") not in ACTION_ROLES:
                 continue
             found = [a for a in areas if a != name and re.search(
-                rf"(?<![\w-]){re.escape(name)}(?:\s*\([a-z]+\))? (?:in|within|inside) (?:the )?{re.escape(a)}(?![\w-])", spec.corpus)]
+                rf"(?<![\w-]){re.escape(name)}(?:\s*\([a-z]+\))? (?:in|within|inside|from) (?:the )?{re.escape(a)}(?![\w-])", spec.corpus)]
             if len(found) == 1:
                 c["in"] = found[0]
 
@@ -339,6 +340,11 @@ def settle_shared_navs(plan: dict) -> None:
         plan["shared_navs"] = shared
     else:
         plan.pop("shared_navs", None)
+
+
+def _stems(text: str) -> set[str]:
+    """Lower-case words of three or more letters without a plural s: "Order history" → {"order", "history"}."""
+    return {w[:-1] if w.endswith("s") and len(w) > 3 else w for w in re.findall(r"[a-z]{3,}", str(text).lower())}
 
 
 def _ancestors(spec: Spec, req: str) -> list[str]:
@@ -431,9 +437,18 @@ def settle_plan(plan: dict, spec: Spec, notes_text: str = "") -> list[str]:
         if (role, name) in planned or RUNTIME.search(name):
             continue
         marker = f'"{name}"(role={role})'
+        # the requirement that states the role, else the one that declares the name in words ("Order history is a
+        # named region": not the first one that mentions "Order history and details"), else the first that names it
+        declares = re.compile(rf"(?<![\w-]){re.escape(name)}(?![\w-])[^.;:\n]*\b(?:is|are) (?:a |the )?"
+                              rf"(?:separate |distinct )?named {role}")
         owner = next((r for r in spec.leaves if marker in spec.requirements[r].text), None) \
+            or next((r for r in spec.leaves if declares.search(spec.requirements[r].text)), None) \
             or next((r for r in spec.leaves if name in spec.requirements[r].text), None)
         holders = [p for p in pages if owner in p.get("reqs", [])] if owner else []
+        # among several pages of that requirement, one named like the control: "Order history" goes on account_orders,
+        # not on the account page that links to it (ArcLaser v3 PrestaShop plan)
+        named_like = [p for p in holders if _stems(name) & _stems(f'{p.get("id", "")} {p.get("route", "")}')]
+        holders = named_like or holders
         target = _group_page(pages, spec, owner, holders) if holders else _home(pages)
         if target is not None:
             target.setdefault("controls", []).append({"role": role, "name": name, "when": "always"})

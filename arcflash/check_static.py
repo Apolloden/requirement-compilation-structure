@@ -264,10 +264,17 @@ def _enclosing(src: str, pos: int) -> list[tuple[str, int, int]]:
 
 def _rendered_as(src: str, pos: int, role: str) -> str | None:
     """None when the text at pos sits in an element of the role (or in a component, which may render one); else the
-    tag it sits in. Inline wrappers such as <span> are looked through."""
+    tag it sits in. Inline wrappers such as <span> are looked through. A link element (<Link>, <a>) around a button's
+    text, or a <button> around a link's text, is the wrong element (ArcLaser v2 and v3 Stack Overflow: the stated
+    "Log in"(role=button) was a <Link> in the first version and 41 to 48 of 66 tests failed on it)."""
+    other = "button" if role == "link" else "link"
     for tag, start, end in reversed(_enclosing(src, pos)):
         explicit = EXPLICIT_ROLE.search(src, start, end)
-        if tag in CONTROL_ELEMENTS[role] or tag[0].isupper() or (explicit and explicit.group(3) == role):
+        if explicit and explicit.group(3) == role:
+            return None
+        if tag in CONTROL_ELEMENTS[other]:
+            return tag
+        if tag in CONTROL_ELEMENTS[role] or tag[0].isupper():
             return None
         if tag not in INLINE_TAGS:
             return tag
@@ -275,28 +282,42 @@ def _rendered_as(src: str, pos: int, role: str) -> str | None:
 
 
 def text_control_issues(files: dict[str, str], plan: dict) -> list[str]:
-    """Rule 2: a planned link or button whose name appears in the frontend only as plain text (evidence.md 6.3)."""
+    """Rule 2: a planned link or button whose name appears, where it is rendered, only as plain text or inside the
+    other control element (evidence.md 6.3). A layout control is judged in the shell files, a page control in its
+    module and the shell (shared components): elsewhere the same name may rightly have another role (a header link and
+    a form's submit button). A button inside <Link> counts only for a button with "to": the plan keeps a button that
+    opens a page only when the requirements state the role (an unstated action may be a button or a link)."""
     issues = []
     frontend = {k: v for k, v in files.items() if k.startswith("frontend/")}
+    shell = {k: v for k, v in frontend.items() if k in SHELL}
     layout = plan.get("layout") if isinstance(plan.get("layout"), dict) else {}
-    controls = [c for c in layout.get("controls", []) if isinstance(c, dict)]
-    controls += [c for p in plan.get("pages", []) if isinstance(p, dict) for c in p.get("controls", []) if isinstance(c, dict)]
+    controls = [(c, shell) for c in layout.get("controls", []) if isinstance(c, dict)]
+    for p in plan.get("pages", []):
+        if isinstance(p, dict):
+            module = {k: v for k, v in frontend.items() if k == f"frontend/src/pages/{p.get('module')}.jsx"}
+            controls += [(c, {**module, **shell} if module else frontend) for c in p.get("controls", []) if isinstance(c, dict)]
     seen = set()
-    for c in controls:
+    for c, scope in controls:
         role, name = c.get("role"), str(c.get("name", "")).strip()
-        if role not in CONTROL_ELEMENTS or not name or "{" in name or (role, name) in seen:
+        if role not in CONTROL_ELEMENTS or not name or "{" in name or (role, name, id(scope)) in seen:
             continue
-        seen.add((role, name))
+        seen.add((role, name, id(scope)))
         text = re.compile(rf">\s*{re.escape(name)}\s*<")
-        found = [(key, m.start(), _rendered_as(src, m.start(), role)) for key, src in frontend.items() for m in text.finditer(src)]
+        found = [(key, m.start(), _rendered_as(src, m.start(), role)) for key, src in scope.items() for m in text.finditer(src)]
+        if role == "button" and not c.get("to"):   # an unstated action: a link element is not judged
+            found = [(key, pos, None if tag in CONTROL_ELEMENTS["link"] else tag) for key, pos, tag in found]
         literal = re.compile(rf"([\"'`]){re.escape(name)}\1")
         elsewhere = any(literal.search(src) or any(r in (role, None) for _, r in _rendered_roles(src, name))
-                        for src in frontend.values())   # data ({label: "X"}) or aria-label="X": not judged
+                        for src in scope.values())   # data ({label: "X"}) or aria-label="X": not judged
         if found and not elsewhere and all(tag is not None for _, _, tag in found):
             key, _, tag = found[0]
-            fix = "<Link to>" if role == "link" else "<button>"
-            issues.append(f'{role} "{name}" is rendered as text in <{tag}> in {key}; use {fix} (rule 2)')
-    return issues
+            if tag in CONTROL_ELEMENTS["link"] and role == "button":
+                issues.append(f'button "{name}" is rendered as a link (<{tag}>) in {key}; the requirements state a button: '
+                              f'use <button type="button"> whose onClick calls navigate (rule 2)')
+            else:
+                fix = "<Link to>" if role == "link" else "<button>"
+                issues.append(f'{role} "{name}" is rendered as text in <{tag}> in {key}; use {fix} (rule 2)')
+    return list(dict.fromkeys(issues))
 
 
 COMPONENT_NAME = re.compile(r"^(?:export\s+(?:default\s+)?)?(?:function\s+([A-Z][\w$]*)|const\s+([A-Z][\w$]*)\s*=)", re.M)

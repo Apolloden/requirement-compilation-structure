@@ -25,25 +25,33 @@ CONTINUE_PROMPT = ("Your previous answer was cut off; it ends with the last comp
 # ends within this many characters of the cut; a one-line answer (minified JSON) is continued as it is.
 CONTINUE_LINE_CHARS = 4000
 RUNAWAY_PROMPT = "Your previous answer turned into blank or repeated text. Answer again, briefly and completely."
+# After the last attempt the best version is repaired until the time or cost budget ends, or until every scenario
+# passes (ArcLaser v2 graded: four sites stopped at 106 to 141 of 180 min on round counts; ArcLaser v3 graded: Ctrip's
+# continued repairs went 83 → 129 own tests, 123 graded against v2's 81). This only bounds a fast endpoint.
+MAX_FINAL_ROUNDS = 40
+TEST_FIX_TRIES = 3              # small fix calls for a generated test file that does not load (ArcLaser v3 12306)
 MAX_REPAIR_ROUNDS = 14          # short aimed rounds (8k tokens, three failure groups each); ArcLaser graded runs stopped at 37 to 118 of 180 min
 QUICK_FIX_LOG_LINES = 40         # a build or start failure: the log tail and this many lines on each side of a named line
 FOCUS_GROUPS = 3                # failure groups a repair round shows in full, largest first
 MAX_ROUNDS_WITHOUT_GAIN = 3     # in a row; each such round sets its failure groups aside, the next aims at others
 MAX_ATTEMPTS = 2
 GOOD_ENOUGH_PASS_RATIO = 0.5
-MAX_RUN_SECONDS = 180 * 60       # no new repair round or restart after this (runtime is not scored; runs of 370 and 615 min were accepted)
-RESCUE_UNTIL_SECONDS = 210 * 60  # an app that does not start still gets repair rounds until this
-# No new model request after this; one in flight finishes and the best version ships. Worst case about 266 min:
-# 220 + a request in flight (the endpoint ends every request by 1,201 s, 20 min) + a check (build 300 s, start 30 s,
-# browser 1,200 s; about 25 min). ArcLaser's repair answers are capped at 8k tokens, so rounds are short.
-HARD_STOP_SECONDS = 220 * 60
+MAX_RUN_SECONDS = 200 * 60       # no new repair round or restart after this (runtime is not scored; runs of 370 and 615 min were accepted)
+RESCUE_UNTIL_SECONDS = 215 * 60  # an app that does not start still gets repair rounds until this
+# No new model request after this; one in flight finishes and the best version ships. Worst case about 271 min:
+# 225 + a request in flight (the endpoint ends every request by 1,201 s, 20 min) + a check (build 300 s, start 30 s,
+# browser 1,200 s; about 25 min). Repair answers are capped at 8k tokens, so rounds are short.
+HARD_STOP_SECONDS = 225 * 60
 REPAIR_RESERVE_SECONDS = 4 * 60
 NOTES_WAIT_SECONDS = 300         # code generation waits at most this long (from the notes' start) for screenshot notes
 ATTEMPT_RESERVE_SECONDS = 15 * 60
-MIN_RUN_COST_CNY = 3.0
-COST_PER_SCENARIO_CNY = 0.08     # cap only; ArcLaser spent a quarter of the leaders (score ÷ 1.07 per doubled cost)
+# Caps only (score ÷ 1.07 per doubled cost): the repairs now run until the time budget. ArcLaser v2 graded spent
+# ¥4.56 of Stack Overflow's ¥5.28 (estimated) with fewer rounds.
+MIN_RUN_COST_CNY = 6.0
+COST_PER_SCENARIO_CNY = 0.12
 RESTART_COST_SHARE = 0.6
-PLATFORM_COST_FACTOR = 2.0
+# Billed ÷ our list-price estimate: ArcLaser v2 graded ¥13.11 billed for ¥9.54 at list prices (1.37); was 2.0.
+PLATFORM_COST_FACTOR = 1.4
 CHARS_PER_TOKEN = 3.6         # measured on v3 Ctrip and PrestaShop calls (3.56 to 3.69); used only when a call has no usage
 PRICES_CNY_PER_MILLION = {"input": 1.0, "cached": 0.02, "output": 4.0}
 SCENARIOS_PER_TEST_CALL = 20

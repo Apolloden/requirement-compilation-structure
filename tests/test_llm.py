@@ -222,7 +222,7 @@ class LLMTests(unittest.TestCase):
     def test_log_lines_carry_the_arclaser_label(self):
         with mock.patch("builtins.print") as printed:
             self.make([api_error(503, "busy"), stream_chunks("ok")]).complete("x", None, "u", max_tokens=10)
-        self.assertTrue(printed.call_args[0][0].startswith("[arclaser] x: retry in 15 s"))
+        self.assertTrue(printed.call_args[0][0].startswith("[arczenith] x: retry in 15 s"))
 
     def test_continuation_stops_after_two(self):
         c = self.make([stream_chunks(f"part{i} ", finish="length") for i in range(3)]).complete_long("x", None, "u", max_tokens=10)
@@ -234,7 +234,8 @@ class LLMTests(unittest.TestCase):
 
     def test_cost_uses_the_cached_price_and_platform_factor(self):
         u = Usage(); u.add("x", Completion("", "stop", input_tokens=1_000_000, cached_tokens=500_000, output_tokens=100_000))
-        self.assertAlmostEqual(u.totals()["list_cny"], 0.91); self.assertAlmostEqual(u.totals()["billed_cny"], 1.82)
+        # factor 1.4: ArcLaser v2 graded ¥13.11 billed for ¥9.54 at list prices
+        self.assertAlmostEqual(u.totals()["list_cny"], 0.91); self.assertAlmostEqual(u.totals()["billed_cny"], 1.274)
 
     def test_at_most_eight_requests_in_flight(self):
         # Task 10: backend and every module (at most 6 after Task 8) run at once; screenshot notes use at most 4.

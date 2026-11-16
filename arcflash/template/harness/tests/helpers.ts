@@ -1,6 +1,7 @@
 // Lookups in the grader's style (role + exact name), grader-shaped names, and failure context for repairs.
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
+import { NAMED } from "./named";
 
 type Surface = Page | Locator;
 
@@ -44,7 +45,6 @@ export const row = byRole("row");
 export const listitem = byRole("listitem");
 export const article = byRole("article");
 export const group = byRole("group");
-export const status = byRole("status");
 export const searchbox = byRole("searchbox");
 export const spinbutton = byRole("spinbutton");
 export const tab = byRole("tab");
@@ -53,7 +53,23 @@ export const menuitem = byRole("menuitem");
 
 /** Any other role the requirements state, by its ARIA name, with an exact accessible name. */
 export function role(surface: Surface, ariaRole: string, name: string): Locator {
+  if (ariaRole === "status" || ariaRole === "alert") return message(surface, ariaRole, name);
   return surface.getByRole(ariaRole as Parameters<Page["getByRole"]>[0], { name, exact: true });
+}
+
+/** A message. A status or alert takes its accessible name only from aria-label, never from its text, so a name the
+ * requirements give ("Note deleted"(role=status)) is looked up by name, and any other message by its text inside a
+ * status or alert element. ArcLaser v2 12306: 53 of 109 first-check failures looked up unnamed messages by name. */
+function message(surface: Surface, ariaRole: "status" | "alert", name?: string | RegExp): Locator {
+  if (name === undefined) return surface.getByRole(ariaRole);
+  if (typeof name === "string" && (NAMED[ariaRole] ?? []).includes(name)) {
+    return surface.getByRole(ariaRole, { name, exact: true });
+  }
+  return surface.getByRole("status").or(surface.getByRole("alert")).filter({ hasText: name });
+}
+
+export function status(surface: Surface, name?: string | RegExp): Locator {
+  return message(surface, "status", name);
 }
 
 /** A field the requirements name by its hint text. */
@@ -69,8 +85,8 @@ export function dialog(surface: Surface, name?: string): Locator {
   return name === undefined ? surface.getByRole("dialog") : surface.getByRole("dialog", { name, exact: true });
 }
 
-export function alert(surface: Surface, name?: string): Locator {
-  return name === undefined ? surface.getByRole("alert") : surface.getByRole("alert", { name, exact: true });
+export function alert(surface: Surface, name?: string | RegExp): Locator {
+  return message(surface, "alert", name);
 }
 
 export function text(surface: Surface, value: string): Locator {

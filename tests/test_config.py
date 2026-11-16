@@ -15,8 +15,9 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual((config.MAX_REPAIR_ROUNDS, config.MAX_ATTEMPTS, config.MAX_PARALLEL_CALLS, config.FOCUS_GROUPS), (14, 2, 8, 3))
         self.assertEqual(set(config.MAX_TOKENS), {"vision", "plan", "backend", "frontend", "tests", "repair", "quick_fix"})
         self.assertEqual(config.RETRY_WAITS, (15, 30, 60, 120))
-        # ArcLaser v2: worst case 220 + a request in flight (20 min) + a check (about 25 min) = about 266 min
-        self.assertEqual((config.HARD_STOP_SECONDS, config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (220 * 60, 180 * 60, 210 * 60))
+        # ArcZenith: worst case 225 + a request in flight (20 min) + a check (about 25 min) = about 271 min; the repairs
+        # run until the time budget (ArcLaser v3 graded: Ctrip 83 → 129 own tests in the continued repairs)
+        self.assertEqual((config.HARD_STOP_SECONDS, config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (225 * 60, 200 * 60, 215 * 60))
         self.assertIn("radiogroup", config.ARIA_ROLES)
 
     def test_main_help_exits_zero(self):

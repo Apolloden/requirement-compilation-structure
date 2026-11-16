@@ -24,12 +24,19 @@ TEST_CODE_LINES = 20
 TITLES_PER_GROUP = 10
 
 
+# The per-test record names of the helpers: uniqueName "<name> [<16 hex>-w<n>-<title>]", uniqueId "<base>_<10 hex>w<n>"
+UNIQUE_NAME = re.compile(r"\s*\[[0-9a-f]{16}-w\d+-[^\]]*\]")
+UNIQUE_ID = re.compile(r"_[0-9a-f]{10}w\d+")
+
+
 def _group_key(error: str) -> tuple[str, str]:
-    """First error line plus the element it was about: Playwright's first line alone is often generic."""
+    """First error line plus the element it was about: Playwright's first line alone is often generic. Per-test record
+    names are cut out, so one cause is one group (ArcLaser v2 12306: the booking step's failure was split into seven
+    groups by the passenger names in its locator, the biggest of 8 tests, and the rounds aimed at others)."""
     lines = [l.strip() for l in error.splitlines() if l.strip()]
     first = lines[0] if lines else ""
     locator = next((l for l in lines if LOCATOR_LINE.match(l)), "").removeprefix("- ")
-    return first, locator
+    return UNIQUE_ID.sub("_…", UNIQUE_NAME.sub(" […]", first)), UNIQUE_ID.sub("_…", UNIQUE_NAME.sub(" […]", locator))
 
 
 def _group_line(key: tuple[str, str]) -> str:

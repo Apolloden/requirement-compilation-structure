@@ -99,7 +99,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((self.out / ".arc/harness/tests/scenarios-1.spec.ts").read_text(), golden_files()[TESTS])
         self.assertIn("shipped a1-r0", self.printed.getvalue())
         self.assertFalse((self.out / "frontend/src/pages/main.jsx").exists())   # no template page left beside the modules
-        self.assertEqual(saved["agent"], "arclaser"); self.assertIn("[arclaser] shipped a1-r0", self.printed.getvalue())
+        self.assertEqual(saved["agent"], "arczenith"); self.assertIn("[arczenith] shipped a1-r0", self.printed.getvalue())
 
     # Task 12: time measured in output tokens on the critical path, independent of the endpoint's speed.
     def test_critical_output_tokens_count_plan_the_longest_code_path_and_repairs(self):
@@ -190,7 +190,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result["shipped"]["source"], "template"); self.assertTrue((self.out / "deploy.sh").exists())
 
     def test_budget_cap_scales_with_scenarios(self):
-        self.assertEqual(Budget(Usage(), 12).cap_cny, 3.0); self.assertAlmostEqual(Budget(Usage(), 142).cap_cny, 11.36)
+        # caps only; the repairs now run until the time budget (ArcLaser v2 graded SO spent ¥4.56 of ¥5.28 estimated)
+        self.assertEqual(Budget(Usage(), 12).cap_cny, 6.0); self.assertAlmostEqual(Budget(Usage(), 142).cap_cny, 17.04)
 
     def test_budget_rules(self):
         now = [0.0]
@@ -205,9 +206,9 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(b.allows("rescue"))
         now[0] = 0.0
         from arcflash.llm import Completion
-        usage.add("x", Completion("", "stop", output_tokens=240_000))   # list ¥0.96, billed ¥1.92 ≥ 60% of ¥3
+        usage.add("x", Completion("", "stop", output_tokens=700_000))   # list ¥2.80, billed ¥3.92 ≥ 60% of ¥6
         self.assertTrue(b.allows("repair")); self.assertFalse(b.allows("attempt")); self.assertIn("cost", b.stop_reason())
-        usage.add("y", Completion("", "stop", output_tokens=200_000))
+        usage.add("y", Completion("", "stop", output_tokens=400_000))   # billed ¥6.16 ≥ ¥6
         self.assertFalse(b.allows("rescue"))           # the cost cap holds for a rescue too
 
     def test_a_restart_needs_as_long_as_the_first_attempt_took(self):
@@ -220,7 +221,7 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(b.allows("attempt")); self.assertIn("restart", b.stop_reason())
 
     def test_limits(self):
-        self.assertEqual((config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (180 * 60, 210 * 60))
+        self.assertEqual((config.MAX_RUN_SECONDS, config.RESCUE_UNTIL_SECONDS), (200 * 60, 215 * 60))
 
     def test_good_enough(self):
         self.assertTrue(good_enough(report(passed=2))); self.assertFalse(good_enough(report(passed=1)))

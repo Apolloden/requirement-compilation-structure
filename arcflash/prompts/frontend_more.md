@@ -6,7 +6,7 @@ The shell already exists. Use its exports exactly as written:
 === frontend/src/App.jsx ===
 {{app}}
 
-Import { api } from "../api.js" (get, post, put, patch and del, each returning {ok, status, data}), what you need from "../shared.jsx", and { Link, useNavigate, useParams } from "react-router-dom". Never render the layout's controls inside a page. A page listed in a plan.shared_navs entry renders that entry's component from the shell and never writes its own copy of that navigation. Render a control with "in" inside the element of the area it names, never beside it. Style with Tailwind classes, following the screenshot notes.
+Import { api } from "../api.js" (get, post, put, patch and del, each returning {ok, status, data}), what you need from "../shared.jsx", and { Link, useNavigate, useParams } from "react-router-dom". Never render the layout's controls inside a page. A page listed in a plan.shared_navs entry renders that entry's component from the shell and never writes its own copy of that navigation. Render a control with "in" inside the element of the area it names, never beside it. A control with "to" keeps its planned role: a link is a <Link to>, a button is a <button type="button"> whose onClick calls navigate. Style with Tailwind classes, following the screenshot notes.
 
 Output exactly one file block and nothing else:
 === FILE: frontend/src/pages/{{module}}.jsx ===
