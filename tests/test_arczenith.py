@@ -256,6 +256,10 @@ class ArcZenithTests(unittest.TestCase):
         c = "Error: x\n  Locator: getByText('traveler_8e3f1a2b3cw4@example.com')"
         d = c.replace("8e3f1a2b3cw4", "0a1b2c3d4ew11")
         self.assertEqual(_group_key(a), _group_key(b)); self.assertEqual(_group_key(c), _group_key(d))
+        # Stack Overflow lane: the profile button named with each test's account email, 10 tests in 7 groups
+        e = "Error: x\n  Locator: getByRole('button', { name: 'tag_watcher@example.com', exact: true })"
+        f = e.replace("tag_watcher@example.com", "filter_user@example.com")
+        self.assertEqual(_group_key(e), _group_key(f)); self.assertIn("<email>", _group_key(e)[1])
 
     # 12306 (v2): 53 of 109 first-check failures looked up unnamed messages by name, as status in one test and alert in
     # another; the repairs then rendered every success message twice (status and alert) to satisfy both.

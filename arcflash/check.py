@@ -27,6 +27,13 @@ TITLES_PER_GROUP = 10
 # The per-test record names of the helpers: uniqueName "<name> [<16 hex>-w<n>-<title>]", uniqueId "<base>_<10 hex>w<n>"
 UNIQUE_NAME = re.compile(r"\s*\[[0-9a-f]{16}-w\d+-[^\]]*\]")
 UNIQUE_ID = re.compile(r"_[0-9a-f]{10}w\d+")
+# Email addresses in a locator are each test's own account (ArcZenith Stack Overflow lane: the signed-in profile button,
+# named with each account's email, failed in 10 tests spread over 7 groups of at most 3; merged, it is the top group, 7).
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _per_test(text: str) -> str:
+    return EMAIL.sub("<email>", UNIQUE_ID.sub("_…", UNIQUE_NAME.sub(" […]", text)))
 
 
 def _group_key(error: str) -> tuple[str, str]:
@@ -36,7 +43,7 @@ def _group_key(error: str) -> tuple[str, str]:
     lines = [l.strip() for l in error.splitlines() if l.strip()]
     first = lines[0] if lines else ""
     locator = next((l for l in lines if LOCATOR_LINE.match(l)), "").removeprefix("- ")
-    return UNIQUE_ID.sub("_…", UNIQUE_NAME.sub(" […]", first)), UNIQUE_ID.sub("_…", UNIQUE_NAME.sub(" […]", locator))
+    return _per_test(first), _per_test(locator)
 
 
 def _group_line(key: tuple[str, str]) -> str:
