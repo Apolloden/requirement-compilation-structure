@@ -235,8 +235,10 @@ class ArcZenithTests(unittest.TestCase):
         self.assertEqual(len(llm.calls), config.MAX_FINAL_ROUNDS_WITHOUT_GAIN)
         self.assertEqual(config.MAX_FINAL_ROUNDS_WITHOUT_GAIN, 6)
 
-    # BookStack lane: 4 of 10 repair answers were byte-identical to earlier failed ones (same prompt, temperature 0.2)
-    def test_a_round_after_a_round_without_gain_samples_more_freely(self):
+    # BookStack lane: 4 of 10 repair answers were byte-identical to earlier failed ones (same prompt, temperature 0.2).
+    # The report has one failure group: round 1 aims at it; then every group was tried, the rotation starts over and the
+    # same prompt would come back, so those rounds sample at 0.7.
+    def test_rounds_after_the_rotation_starts_over_sample_more_freely(self):
         failing = self.report(1)
         allowed = iter([True] * 3 + [False] * 5)
         llm = FakeLLM({"repair:": ["no edits"] * 3})

@@ -200,6 +200,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
     best, best_snapshot = first, ws.snapshot(f"{label}-r0", _meta(f"{label}-r0", first))
     without_gain, quick_tried = 0, False   # one quick fix per failure; if it gains nothing, normal rounds follow
     tried: set = set()   # failure groups a round aimed at without gain
+    wrapped = False      # every group was tried and the rotation started over: the same prompt would come back
     rounds = config.MAX_FINAL_ROUNDS if final else config.MAX_REPAIR_ROUNDS
     for n in range(1, rounds + 1):
         # past the time limit only an app that shows nothing is still repaired: it would score 0 (v4 plan R2)
@@ -209,7 +210,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         if best.all_green() or scenarios_done(best) or stalled or blind or not budget.allows(kind):
             break
         if tried and not best.shown_keys(tried) - tried:   # every group was tried: start the rotation again
-            tried = set()
+            tried, wrapped = set(), True
         files = ws.read_generated()
         quick = None if quick_tried else quick_fix_task(files, best)
         if quick is not None:   # a build or start error with a named line: a 2k-token fix, not a full round (E6)
@@ -222,7 +223,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
         aimed = best.shown_keys(tried) if quick is None else set()
         try:
             with span(f"{purpose.split(':')[0].replace('_', ' ')} {label}.{n}"):
-                temperature = config.TEMPERATURE if without_gain == 0 else config.RETRY_TEMPERATURE   # a new idea, not the same fix
+                temperature = config.RETRY_TEMPERATURE if wrapped else config.TEMPERATURE   # a new idea, not the same fix
                 answer = llm.complete_long(purpose, system, context + "\n\n" + task, max_tokens=tokens,
                                            temperature=temperature, stop_when=RepeatGuard(), continue_cut=False)
                 new = _apply(llm, purpose, system, context, files, answer.text)
@@ -237,7 +238,7 @@ def repair_loop(ws: Workspace, context: str, plan: dict, llm, first: CheckReport
             report = check()
         snapshot = ws.snapshot(f"{label}-r{n}", _meta(f"{label}-r{n}", report))
         if report.rank() > best.rank():
-            best, best_snapshot, note, without_gain, quick_tried = report, snapshot, "", 0, False
+            best, best_snapshot, note, without_gain, quick_tried, wrapped = report, snapshot, "", 0, False, False
         else:
             ws.restore(best_snapshot)
             note, without_gain = WORSE_NOTE, without_gain + 1
