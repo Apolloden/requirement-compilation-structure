@@ -248,6 +248,12 @@ class ArcZenithTests(unittest.TestCase):
         self.assertIn('surface.getByRole("status").or(surface.getByRole("alert")).filter({ hasText: name })', helpers)
         self.assertTrue((AGENT_ROOT / "arcflash" / "template" / "harness" / "tests" / "named.ts").is_file())
 
+    # ArcZenith Keep lane (2026-11-16): a white page reported only "the page rendered nothing"; the cause, "ReferenceError:
+    # notification is not defined", came last in the smoke error and the repair prompt shows its first lines only.
+    def test_the_page_check_reports_page_errors_first(self):
+        smoke = (AGENT_ROOT / "arcflash" / "template" / "harness" / "tests" / "smoke.spec.ts").read_text()
+        self.assertLess(smoke.index('expect.soft(errors, errors.join("\\n")).toEqual([]);'), smoke.index("the page rendered nothing"))
+
     def test_rule_8_gives_success_messages_status_and_a_name(self):
         rules = load_prompt("rules")
         self.assertIn('Errors use role="alert"; success and status messages use role="status"', rules)

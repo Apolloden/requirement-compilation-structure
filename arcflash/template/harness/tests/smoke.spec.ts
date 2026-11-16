@@ -17,11 +17,13 @@ for (const target of targets) {
     });
     await page.goto(target.route);
     await page.waitForLoadState("networkidle");
+    // the page's own errors first: a repair sees the first lines of this test's error (ArcZenith Keep lane: a white
+    // page reported only "rendered nothing", while the cause was "ReferenceError: notification is not defined")
+    expect.soft(errors, errors.join("\n")).toEqual([]);
     expect.soft(await page.locator("#root > *").count(), "the page rendered nothing inside #root").toBeGreaterThan(0);
     for (const control of target.controls) {
       const n = await page.getByRole(control.role as Parameters<typeof page.getByRole>[0], { name: control.name, exact: true }).count();
       expect.soft(n, `${n} elements with role ${control.role} and name "${control.name}" (at most one allowed)`).toBeLessThanOrEqual(1);
     }
-    expect.soft(errors, errors.join("\n")).toEqual([]);
   });
 }
